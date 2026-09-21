@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wordbook - MyLinguistics</title>
+<meta name="description" content="Sense-level Japanese vocabulary: monolingual definitions, FSRS review, and a passive track.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="stylesheet" href="assets/css/wordbook.css">
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem('ml.theme');
+      if (stored === 'dark' || stored === 'light') {
+        document.documentElement.setAttribute('data-theme', stored);
+      }
+    } catch (err) { }
+  })();
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main" data-i18n="a11y.skip">Skip to content</a>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true">ML</span>
+      <span class="brand-name">MyLinguistics</span>
+    </a>
+    <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="siteNav" data-i18n="nav.menu">Menu</button>
+    <nav class="site-nav" id="siteNav" aria-label="Main navigation">
+      <a href="index.html" data-i18n="nav.home">Home</a>
+      <a href="study.html" data-i18n="nav.study">Study</a>
+      <a href="reader/index.html" data-i18n="nav.reader">Reader</a>
+      <a href="about.html" data-i18n="nav.about">About</a>
+    </nav>
+    <button class="theme-toggle" id="themeToggle" type="button">Dark</button>
+  </div>
+</header>
+<main id="main">
+
+  <section class="page-head">
+    <div class="container">
+      <h1 data-i18n="wb.title">Wordbook</h1>
+      <p class="lede" data-i18n="wb.lede">Sense-level cards, monolingual definitions, and a passive track.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <p class="notice hidden" id="wbDictNotice"></p>
+
+      <div class="wb-stats" id="wbStats"></div>
+      <div class="wb-tabs" role="tablist" id="wbTabs">
+        <button class="btn btn-secondary wb-tab is-active" data-view="review" type="button" data-i18n="wb.tab.review">Review</button>
+        <button class="btn btn-secondary wb-tab" data-view="digest" type="button" data-i18n="wb.tab.passive">Passive</button>
+        <button class="btn btn-secondary wb-tab" data-view="browse" type="button" data-i18n="wb.tab.browse">Browse</button>
+        <button class="btn btn-secondary wb-tab" data-view="river" type="button" data-i18n="wb.tab.river">River</button>
+      </div>
+
+      <div class="panel wb-view" id="wbReview">
+        <div class="wb-review-top">
+          <span class="pill pill-accent" id="wbCounter">0 / 0</span>
+          <span class="pill" id="wbModeLabel">-</span>
+          <span class="muted small" data-i18n="wb.hint">Space flips, 1-4 grades</span>
+        </div>
+        <div class="wb-progress"><div class="wb-progress-fill" id="wbProgress"></div></div>
+        <div class="wb-card" id="wbCard">
+          <p class="card-label" data-i18n="wb.th.definition">Definition</p>
+          <p class="wb-term" id="wbPrompt">-</p>
+          <p class="card-reading" id="wbReading"></p>
+          <div class="hidden" id="wbTypeWrap">
+            <input class="wb-input" id="wbInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" lang="ja" placeholder="日本語で入力（任意）">
+          </div>
+          <p class="wb-definition hidden" id="wbDefinition"></p>
+          <p class="card-example hidden" id="wbContext"></p>
+          <p class="muted small hidden" id="wbTolerance"></p>
+        </div>
+        <div class="wb-grades" id="wbGrades">
+          <button class="btn btn-danger" data-rating="1" type="button"><span data-i18n="wb.grade.again">Again</span> <span class="wb-when" data-when="1"></span></button>
+          <button class="btn btn-secondary" data-rating="2" type="button"><span data-i18n="wb.grade.hard">Hard</span> <span class="wb-when" data-when="2"></span></button>
+          <button class="btn btn-primary" data-rating="3" type="button"><span data-i18n="wb.grade.good">Good</span> <span class="wb-when" data-when="3"></span></button>
+          <button class="btn btn-success" data-rating="4" type="button"><span data-i18n="wb.grade.easy">Easy</span> <span class="wb-when" data-when="4"></span></button>
+          <button class="btn btn-ghost" id="wbFlip" type="button" data-i18n="wb.flip">Flip</button>
+        </div>
+        <div class="wb-done hidden" id="wbDone">
+          <h2 class="panel-title" data-i18n="wb.done.title">All caught up</h2>
+          <p class="muted mb-0" data-i18n="wb.done.note">Nothing is due.</p>
+        </div>
+      </div>
+
+      <div class="panel wb-view hidden" id="wbDigest">
+        <div class="wb-review-top">
+          <span class="pill pill-accent" id="wbDigestCount">0</span>
+          <span class="muted small" data-i18n="wb.passive.note">Read only.</span>
+          <button class="btn btn-ghost btn-small" id="wbDigestRefresh" type="button" data-i18n="wb.passive.rebuild">Rebuild</button>
+        </div>
+        <div class="wb-digest-list" id="wbDigestList"></div>
+      </div>
+
+      <div class="panel wb-view hidden" id="wbBrowse">
+        <div class="field wb-search">
+          <span data-i18n="wb.th.word">Word</span>
+          <input id="wbSearch" type="search" data-i18n-placeholder="wb.search" placeholder="Search a word, reading, or definition">
+        </div>
+        <div class="wb-table-wrap">
+          <table class="wb-table">
+            <thead>
+              <tr>
+                <th data-i18n="wb.th.word">Word</th>
+                <th data-i18n="wb.th.reading">Reading</th>
+                <th data-i18n="wb.th.definition">Definition</th>
+                <th data-i18n="wb.th.recognition">Recognition</th>
+              </tr>
+            </thead>
+            <tbody id="wbBrowseBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel wb-view hidden" id="wbRiver">
+        <div class="wb-review-top">
+          <span class="muted small" data-i18n="wb.river.note">A random, context-free stream.</span>
+          <button class="btn btn-ghost btn-small" id="wbRiverPause" type="button" data-i18n="wb.river.pause">Pause</button>
+          <button class="btn btn-ghost btn-small" id="wbRiverShuffle" type="button" data-i18n="wb.river.shuffle">New course</button>
+        </div>
+        <div class="wb-river" id="wbRiver"><div class="wb-river-track" id="wbRiverTrack"></div></div>
+      </div>
+
+      <details class="wb-manage">
+        <summary data-i18n="wb.manage">Manage data</summary>
+        <div class="row-actions">
+          <button class="btn btn-ghost btn-small" id="wbExport" type="button" data-i18n="wb.export">Export JSON</button>
+          <button class="btn btn-ghost btn-small" id="wbReset" type="button" data-i18n="wb.reset">Reset all</button>
+        </div>
+        <p class="muted small mb-0" data-i18n="wb.manage.note">Everything stays in this browser in IndexedDB.</p>
+      </details>
+    </div>
+  </section>
+
+</main>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/app.js"></script>
+<script type="module" src="src/lexicon/entry.js"></script>
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <p data-i18n="footer.tagline">MyLinguistics</p>
+  </div>
+</footer>
+</body>
+</html>

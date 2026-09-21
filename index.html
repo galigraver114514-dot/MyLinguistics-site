@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MyLinguistics</title>
+<meta name="description" content="A personal workspace for reading Japanese and keeping the vocabulary: an EPUB reader and a sense-level wordbook with monolingual definitions.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/css/style.css">
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem('ml.theme');
+      if (stored === 'dark' || stored === 'light') {
+        document.documentElement.setAttribute('data-theme', stored);
+      }
+    } catch (err) { }
+  })();
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main" data-i18n="a11y.skip">Skip to content</a>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true">ML</span>
+      <span class="brand-name">MyLinguistics</span>
+    </a>
+    <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="siteNav" data-i18n="nav.menu">Menu</button>
+    <nav class="site-nav" id="siteNav" aria-label="Main navigation">
+      <a href="index.html" data-i18n="nav.home">Home</a>
+      <a href="study.html" data-i18n="nav.study">Study</a>
+      <a href="reader/index.html" data-i18n="nav.reader">Reader</a>
+      <a href="about.html" data-i18n="nav.about">About</a>
+    </nav>
+    <button class="theme-toggle" id="themeToggle" type="button">Dark</button>
+  </div>
+</header>
+<main id="main">
+
+  <section class="hero">
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow" data-i18n="home.eyebrow">Reading and vocabulary</p>
+        <h1 data-i18n="home.title">Read Japanese, and keep the words you meet.</h1>
+        <p class="lede" data-i18n="home.lede">The reader opens your own EPUBs. The wordbook keeps sense-level cards with Japanese definitions.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="study.html" data-i18n="home.cta.study">Open the wordbook</a>
+          <a class="btn btn-secondary" href="reader/index.html" data-i18n="home.cta.reader">Open the reader</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/app.js"></script>
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <p data-i18n="footer.tagline">MyLinguistics</p>
+  </div>
+</footer>
+</body>
+</html>

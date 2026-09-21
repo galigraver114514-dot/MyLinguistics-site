@@ -1,0 +1,261 @@
+/* Advanced wordbook page. Reuses the shared site tokens from style.css. */
+
+.wb-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.wb-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: grid;
+  gap: 2px;
+}
+
+.wb-stat span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.wb-stat strong {
+  font-size: 1.25rem;
+  letter-spacing: -0.02em;
+}
+
+.wb-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.wb-tab.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.wb-review-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.wb-review-top .btn {
+  margin-left: auto;
+}
+
+.wb-progress {
+  height: 6px;
+  background: var(--surface-3);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 18px;
+}
+
+.wb-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.wb-card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 26px;
+  min-height: 190px;
+  display: grid;
+  align-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.wb-term {
+  font-size: clamp(1.6rem, 1.1rem + 2.4vw, 2.6rem);
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.02em;
+  line-height: 1.35;
+}
+
+.wb-definition {
+  font-size: 0.98rem;
+  margin: 6px 0 0;
+  max-width: 60ch;
+  line-height: 1.7;
+}
+
+.wb-input {
+  width: 100%;
+  max-width: 420px;
+  padding: 10px 12px;
+  font-size: 1.05rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.wb-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.wb-grades {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.wb-when {
+  display: block;
+  font-size: 0.72rem;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+.wb-done {
+  text-align: center;
+  padding: 24px 0;
+}
+
+.wb-digest-list {
+  display: grid;
+  gap: 14px;
+}
+
+.wb-digest-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 16px 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.wb-digest-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.wb-digest-head strong {
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+}
+
+
+.wb-digest-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.wb-search {
+  max-width: 420px;
+  margin-bottom: 16px;
+}
+
+.wb-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.wb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.wb-table th,
+.wb-table td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.wb-table th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
+.wb-table tr:last-child td {
+  border-bottom: none;
+}
+
+
+@media (max-width: 820px) {
+  .wb-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .wb-grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.wb-manage {
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.wb-manage summary {
+  cursor: pointer;
+  width: max-content;
+}
+
+.wb-manage .row-actions {
+  margin-top: 10px;
+}
+
+/* The word river: a random, context-free stream of words. */
+.wb-river {
+  position: relative;
+  height: 460px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  -webkit-mask-image: linear-gradient(transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(transparent, #000 16%, #000 84%, transparent);
+}
+
+.wb-river-track { display: flex; flex-direction: column; will-change: transform; }
+
+.wb-river-item {
+  height: 92px;
+  flex: 0 0 92px;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 0 24px;
+  opacity: 0.4;
+  transition: opacity 0.3s ease;
+}
+
+.wb-river-item.is-current { opacity: 1; }
+
+.wb-river-term {
+  font-size: clamp(1.5rem, 1.1rem + 1.4vw, 2.1rem);
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.wb-river-reading { color: var(--accent); font-size: 0.9rem; margin: 0; }
+.wb-river-definition { color: var(--muted); font-size: 0.94rem; margin: 0; max-width: 62ch; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wb-river-item { transition: none; }
+}

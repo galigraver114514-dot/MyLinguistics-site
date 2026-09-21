@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page not found - MyLinguistics</title>
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/css/style.css">
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem('ml.theme');
+      if (stored === 'dark' || stored === 'light') {
+        document.documentElement.setAttribute('data-theme', stored);
+      }
+    } catch (err) { /* storage unavailable, keep the default theme */ }
+  })();
+</script>
+</head>
+<body>
+<main id="main">
+  <section class="section">
+    <div class="container center" style="padding:60px 0;">
+      <p class="eyebrow">Error 404</p>
+      <h1>This page is missing.</h1>
+      <p class="lede" style="margin:0 auto 24px;">The link may be wrong, or the page may have moved. Head back to a deck instead.</p>
+      <div class="hero-actions" style="justify-content:center;">
+        <a class="btn btn-primary" href="index.html">Back home</a>
+        <a class="btn btn-secondary" href="study.html">Start studying</a>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <p>MyLinguistics - a personal language-learning workspace.</p>
+  </div>
+</footer>
+</body>
+</html>

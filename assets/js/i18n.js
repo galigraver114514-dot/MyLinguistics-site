@@ -1,0 +1,291 @@
+/* MyLinguistics - interface language strings.
+ *
+ * One setting, ml.uilang, switches the interface between English, Chinese, and
+ * Japanese. The study surface itself is the Japanese Wordbook.
+ *
+ * Static markup carries data-i18n / data-i18n-placeholder attributes; scripts
+ * call ML.t(key, vars). Placeholders use {name}.
+ */
+window.ML_I18N = (function () {
+  'use strict';
+
+  var SUPPORTED = ['en', 'zh', 'ja'];
+  var FALLBACK = 'en';
+
+  var STRINGS = {
+    en: {
+      'nav.home': 'Home',
+      'nav.study': 'Study',
+      'nav.reader': 'Reader',
+      'nav.about': 'About',
+      'nav.menu': 'Menu',
+      'a11y.skip': 'Skip to content',
+      'footer.tagline': 'MyLinguistics - a personal reading and vocabulary workspace. Everything stays in your browser.',
+      'lang.uiLabel': 'Interface language',
+      'theme.toDark': 'Dark',
+      'theme.toLight': 'Light',
+      'theme.ariaDark': 'Switch to the dark theme',
+      'theme.ariaLight': 'Switch to the light theme',
+
+      'home.eyebrow': 'Reading and vocabulary',
+      'home.title': 'Read Japanese, and keep the words you meet.',
+      'home.lede': 'The reader opens your own EPUBs. The wordbook turns what you look up into sense-level cards with Japanese definitions, and keeps a passive track for the days you only want to read.',
+      'home.cta.study': 'Open the wordbook',
+      'home.cta.reader': 'Open the reader',
+
+      'wb.title': 'Wordbook',
+      'wb.lede': 'One card per sense, monolingual definitions, recognition before production, and a passive track for tired days.',
+      'wb.tab.review': 'Review',
+      'wb.tab.passive': 'Passive',
+      'wb.tab.browse': 'Browse',
+      'wb.tab.river': 'River',
+      'wb.stat.words': 'Words',
+      'wb.stat.due': 'Due',
+      'wb.stat.new': 'New',
+      'wb.stat.recognition': 'Recognition',
+      'wb.mode.recognition': 'Recognition',
+      'wb.mode.output': 'Output',
+      'wb.hint': 'Space flips, 1-4 grades',
+      'wb.due.min': '{n}m',
+      'wb.due.hour': '{n}h',
+      'wb.due.day': '{n}d',
+      'wb.due.month': '{n}mo',
+      'wb.due.year': '{n}y',
+      'wb.grade.again': 'Again',
+      'wb.grade.hard': 'Hard',
+      'wb.grade.good': 'Good',
+      'wb.grade.easy': 'Easy',
+      'wb.flip': 'Flip',
+      'wb.flipBack': 'Flip back',
+      'wb.done.title': 'All caught up',
+      'wb.done.note': 'Nothing is due. Switch to Passive to keep meeting words without spending recall effort.',
+      'wb.passive.count': '{n} words',
+      'wb.passive.note': 'Read only. This raises recognition and never touches the review schedule.',
+      'wb.passive.rebuild': 'Rebuild',
+      'wb.passive.empty': 'Nothing here yet. Words appear as they enter the lexicon.',
+      'wb.river.note': 'A random, context-free stream. No grading; it only nudges recognition.',
+      'wb.river.pause': 'Pause',
+      'wb.river.resume': 'Resume',
+      'wb.river.shuffle': 'New course',
+      'wb.river.empty': 'The river is empty. Words appear as they enter the lexicon.',
+      'wb.known': 'Already know it',
+      'wb.search': 'Search a word, reading, or definition',
+      'wb.th.word': 'Word',
+      'wb.th.reading': 'Reading',
+      'wb.th.definition': 'Definition',
+      'wb.th.recognition': 'Recognition',
+      'wb.manage': 'Manage data',
+      'wb.export': 'Export JSON',
+      'wb.reset': 'Reset all',
+      'wb.manage.note': 'Everything stays in this browser.',
+      'wb.notice': 'The wordbook currently holds Japanese only.',
+      'wb.dictMissing': 'No dictionary source is loaded, so definitions come from the built-in seed.',
+      'wb.confirmReset': 'Delete every word, card, and exposure stored in this browser?',
+      'wb.typeOptional': 'Typing is optional; grade from memory.',
+      'wb.empty.browse': 'No match.',
+
+      'about.title': 'About',
+      'about.lede': 'A small, static workspace for reading Japanese and holding on to the vocabulary.',
+      'about.body1': 'Nothing is uploaded. The wordbook keeps its lexicon in IndexedDB, the reader stores books in IndexedDB too, and the interface language and theme live in localStorage.',
+      'about.body2': 'Definitions are meant to come from the shared dictionary module and a Yomitan dictionary you import yourself, so a single lookup source follows you across the reader and the wordbook.',
+      'about.reader': 'The reader opens EPUB files that you own. It keeps vertical and horizontal typesetting, ruby as authored, and your reading position as a text offset.',
+      'about.license': 'Released under the MIT License.'
+    },
+    zh: {
+      'nav.home': '首页',
+      'nav.study': '学习',
+      'nav.reader': '阅读器',
+      'nav.about': '关于',
+      'nav.menu': '菜单',
+      'a11y.skip': '跳到正文',
+      'footer.tagline': 'MyLinguistics - 个人的阅读与词汇工作区。所有内容都留在你的浏览器里。',
+      'lang.uiLabel': '界面语言',
+      'theme.toDark': '深色',
+      'theme.toLight': '浅色',
+      'theme.ariaDark': '切换到深色主题',
+      'theme.ariaLight': '切换到浅色主题',
+
+      'home.eyebrow': '阅读与词汇',
+      'home.title': '安静地读日语，把遇到的词留下来。',
+      'home.lede': '阅读器打开你自己的 EPUB；单词书把你查过的词变成按义项划分的卡片，用日语释义，并为只想读不想动脑的日子留了一条被动轨道。',
+      'home.cta.study': '打开单词书',
+      'home.cta.reader': '打开阅读器',
+
+      'wb.title': '单词书',
+      'wb.lede': '一个义项一张卡，日语释义，先认识后产出，累了也有被动模式。',
+      'wb.tab.review': '复习',
+      'wb.tab.passive': '被动',
+      'wb.tab.browse': '浏览',
+      'wb.tab.river': '单词河',
+      'wb.stat.words': '词数',
+      'wb.stat.due': '到期',
+      'wb.stat.new': '新卡',
+      'wb.stat.recognition': '认识度',
+      'wb.mode.recognition': '认识',
+      'wb.mode.output': '产出',
+      'wb.hint': '空格翻面，1-4 评分',
+      'wb.due.min': '{n}分',
+      'wb.due.hour': '{n}小时',
+      'wb.due.day': '{n}天',
+      'wb.due.month': '{n}个月',
+      'wb.due.year': '{n}年',
+      'wb.grade.again': '重来',
+      'wb.grade.hard': '困难',
+      'wb.grade.good': '一般',
+      'wb.grade.easy': '简单',
+      'wb.flip': '翻面',
+      'wb.flipBack': '翻回',
+      'wb.done.title': '全部清空',
+      'wb.done.note': '没有到期的卡。切到被动模式，不费回忆的力气也能继续遇到这些词。',
+      'wb.passive.count': '{n} 个词',
+      'wb.passive.note': '只看不测。它只提升认识度，绝不写入复习排程。',
+      'wb.passive.rebuild': '重新生成',
+      'wb.passive.empty': '暂时没有内容。词进入词库后会出现在这里。',
+      'wb.river.note': '随机、无上下文的词流。不打分，只轻轻增加认识度。',
+      'wb.river.pause': '暂停',
+      'wb.river.resume': '继续',
+      'wb.river.shuffle': '换一条河',
+      'wb.river.empty': '河里还没有词。词进入词库后就会流出来。',
+      'wb.known': '已经会了',
+      'wb.search': '搜词、读音或释义',
+      'wb.th.word': '词',
+      'wb.th.reading': '读音',
+      'wb.th.definition': '释义',
+      'wb.th.recognition': '认识度',
+      'wb.manage': '管理数据',
+      'wb.export': '导出',
+      'wb.reset': '全部重置',
+      'wb.manage.note': '一切都保存在这个浏览器里。',
+      'wb.notice': '单词书目前只收日语。',
+      'wb.dictMissing': '尚未接入词典模块，当前释义来自内置种子。',
+      'wb.confirmReset': '删除这个浏览器里保存的全部词、卡片和曝光记录？',
+      'wb.typeOptional': '可以不输入，凭记忆自评即可。',
+      'wb.empty.browse': '没有匹配。',
+
+      'about.title': '关于',
+      'about.lede': '一个用于读日语和留住词汇的小型静态工作区。',
+      'about.body1': '没有任何内容上传。单词书的词库存在 IndexedDB，阅读器的书也存在 IndexedDB，界面语言和主题则记在 localStorage。',
+      'about.body2': '释义以共享词典模块为准，并可导入你自己的 Yomitan 词典，这样阅读器和单词书用的是同一个查询来源。',
+      'about.reader': '阅读器打开你自己的 EPUB，支持竖排与横排、保留原文振假名，并用文本偏移记录阅读位置。',
+      'about.license': '基于 MIT 许可发布。'
+    },
+    ja: {
+      'nav.home': 'ホーム',
+      'nav.study': '学習',
+      'nav.reader': 'リーダー',
+      'nav.about': 'このサイト',
+      'nav.menu': 'メニュー',
+      'a11y.skip': '本文へスキップ',
+      'footer.tagline': 'MyLinguistics - 個人用の読書と語彙のワークスペース。すべてブラウザの中に留まります。',
+      'lang.uiLabel': '表示言語',
+      'theme.toDark': 'ダーク',
+      'theme.toLight': 'ライト',
+      'theme.ariaDark': 'ダークテーマに切り替える',
+      'theme.ariaLight': 'ライトテーマに切り替える',
+
+      'home.eyebrow': '読書と語彙',
+      'home.title': '日本語を静かに読み、出会った語を残す。',
+      'home.lede': 'リーダーは手持ちの EPUB を開きます。単語帳は引いた語を語義ごとのカードに変え、日本語の語義で保ち、読むだけでいい日のための受け身トラックも用意します。',
+      'home.cta.study': '単語帳を開く',
+      'home.cta.reader': 'リーダーを開く',
+
+      'wb.title': '単語帳',
+      'wb.lede': '語義ごとに一枚、日本語の語義、認識してから産出、疲れた日のための受け身モード。',
+      'wb.tab.review': '復習',
+      'wb.tab.passive': '受け身',
+      'wb.tab.browse': '一覧',
+      'wb.tab.river': '単語の川',
+      'wb.stat.words': '語数',
+      'wb.stat.due': '期限',
+      'wb.stat.new': '新規',
+      'wb.stat.recognition': '認識度',
+      'wb.mode.recognition': '認識',
+      'wb.mode.output': '産出',
+      'wb.hint': 'スペースでめくる、1-4 で評価',
+      'wb.due.min': '{n}分',
+      'wb.due.hour': '{n}時間',
+      'wb.due.day': '{n}日',
+      'wb.due.month': '{n}か月',
+      'wb.due.year': '{n}年',
+      'wb.grade.again': 'もう一度',
+      'wb.grade.hard': '難しい',
+      'wb.grade.good': '普通',
+      'wb.grade.easy': '簡単',
+      'wb.flip': 'めくる',
+      'wb.flipBack': '戻す',
+      'wb.done.title': 'すべて完了',
+      'wb.done.note': '期限のカードはありません。受け身に切り替えれば、思い出す負荷なしで語に触れ続けられます。',
+      'wb.passive.count': '{n} 語',
+      'wb.passive.note': '読むだけ。認識度を上げ、復習のスケジュールには一切触れません。',
+      'wb.passive.rebuild': '作り直す',
+      'wb.passive.empty': 'まだ何もありません。語が語彙に入るとここに出ます。',
+      'wb.river.note': 'ランダムで文脈のない語の流れ。評価はせず、認識度を少しだけ上げます。',
+      'wb.river.pause': '一時停止',
+      'wb.river.resume': '再開',
+      'wb.river.shuffle': '流れを変える',
+      'wb.river.empty': '川はまだ空です。語が語彙に入ると流れてきます。',
+      'wb.known': 'もう知っている',
+      'wb.search': '語・読み・語義で検索',
+      'wb.th.word': '語',
+      'wb.th.reading': '読み',
+      'wb.th.definition': '語義',
+      'wb.th.recognition': '認識度',
+      'wb.manage': 'データ管理',
+      'wb.export': '書き出す',
+      'wb.reset': 'すべて消す',
+      'wb.manage.note': 'すべてこのブラウザに保存されます。',
+      'wb.notice': '単語帳は今のところ日本語だけです。',
+      'wb.dictMissing': '辞書モジュールは未接続のため、語義は内蔵シードを表示しています。',
+      'wb.confirmReset': 'このブラウザの語・カード・露出記録をすべて削除しますか。',
+      'wb.typeOptional': '入力は任意です。記憶だけで自己評価してください。',
+      'wb.empty.browse': '一致なし。',
+
+      'about.title': 'このサイト',
+      'about.lede': '日本語を読み、語彙を残すための小さな静的ワークスペースです。',
+      'about.body1': '何も送信しません。単語帳の語彙は IndexedDB、リーダーの本も IndexedDB、表示言語とテーマは localStorage に保存されます。',
+      'about.body2': '語義は共有の辞書モジュールを正とし、手持ちの Yomitan 辞書を取り込めます。リーダーと単語帳が同じ検索元を使うことになります。',
+      'about.reader': 'リーダーは手持ちの EPUB を開きます。縦書きと横書き、原著のルビ、テキスト位置による読書位置の記憶に対応します。',
+      'about.license': 'MIT ライセンスで公開。'
+    }
+  };
+
+  function normalize(code) {
+    var value = code ? String(code).toLowerCase() : '';
+    if (value.indexOf('zh') === 0) return 'zh';
+    if (value.indexOf('ja') === 0) return 'ja';
+    if (value.indexOf('en') === 0) return 'en';
+    return '';
+  }
+
+  function supported(code) {
+    return SUPPORTED.indexOf(normalize(code)) >= 0;
+  }
+
+  function detect() {
+    var nav = (typeof navigator !== 'undefined' && (navigator.language || navigator.userLanguage)) || '';
+    return normalize(nav) || FALLBACK;
+  }
+
+  function translate(code, key, vars) {
+    var lang = supported(code) ? normalize(code) : FALLBACK;
+    var table = STRINGS[lang] || STRINGS[FALLBACK];
+    var text = table[key];
+    if (text == null) text = STRINGS[FALLBACK][key];
+    if (text == null) return key;
+    if (vars) {
+      Object.keys(vars).forEach(function (name) {
+        text = text.split('{' + name + '}').join(String(vars[name]));
+      });
+    }
+    return text;
+  }
+
+  return {
+    SUPPORTED: SUPPORTED,
+    FALLBACK: FALLBACK,
+    normalize: normalize,
+    supported: supported,
+    detect: detect,
+    translate: translate
+  };
+})();

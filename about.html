@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About - MyLinguistics</title>
+<meta name="description" content="How the reader and the wordbook fit together, and where the data lives.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/css/style.css">
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem('ml.theme');
+      if (stored === 'dark' || stored === 'light') {
+        document.documentElement.setAttribute('data-theme', stored);
+      }
+    } catch (err) { }
+  })();
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main" data-i18n="a11y.skip">Skip to content</a>
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true">ML</span>
+      <span class="brand-name">MyLinguistics</span>
+    </a>
+    <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="siteNav" data-i18n="nav.menu">Menu</button>
+    <nav class="site-nav" id="siteNav" aria-label="Main navigation">
+      <a href="index.html" data-i18n="nav.home">Home</a>
+      <a href="study.html" data-i18n="nav.study">Study</a>
+      <a href="reader/index.html" data-i18n="nav.reader">Reader</a>
+      <a href="about.html" data-i18n="nav.about">About</a>
+    </nav>
+    <button class="theme-toggle" id="themeToggle" type="button">Dark</button>
+  </div>
+</header>
+<main id="main">
+
+  <section class="page-head">
+    <div class="container">
+      <h1 data-i18n="about.title">About</h1>
+      <p class="lede" data-i18n="about.lede">A small, static workspace for reading Japanese and holding on to the vocabulary.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="panel">
+        <p data-i18n="about.body1">Nothing is uploaded.</p>
+        <p class="mb-0" data-i18n="about.body2">Definitions come from the shared dictionary module.</p>
+      </div>
+      <div class="panel">
+        <p class="mb-0" data-i18n="about.reader">The reader opens EPUB files that you own.</p>
+      </div>
+      <div class="panel">
+        <p class="mb-0" data-i18n="about.license">Released under the MIT License.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/app.js"></script>
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <p data-i18n="footer.tagline">MyLinguistics</p>
+  </div>
+</footer>
+</body>
+</html>

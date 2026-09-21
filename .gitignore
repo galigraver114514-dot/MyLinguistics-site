@@ -1,0 +1,19 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node tooling (the advanced wordbook uses Node only for its test suite;
+# the pages themselves stay dependency-free)
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Local scratch files
+*.local

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="paper">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Reader">
+<title>Reader - MyLinguistics</title>
+<link rel="stylesheet" href="reader.css">
+</head>
+<body>
+
+<header id="bar">
+  <button id="btn-open" type="button">ファイル</button>
+  <button id="btn-sample" type="button">サンプル</button>
+  <div id="book-title">リーダー</div>
+  <button id="btn-toc" type="button">目次</button>
+  <button id="btn-settings" type="button">表示</button>
+</header>
+
+<main id="viewport" class="vertical" tabindex="0" aria-label="本文">
+  <article id="content"></article>
+  <div id="empty">
+    <p>EPUB を開くか、サンプルを表示してください。</p>
+    <p class="hint">縦書き・横書き、文字サイズ、読んでいた位置はこの端末に保存されます。</p>
+  </div>
+</main>
+
+<footer id="foot">
+  <button id="btn-prev" type="button" aria-label="前のページ">&lsaquo;</button>
+  <span id="page-info">- / -</span>
+  <button id="btn-next" type="button" aria-label="次のページ">&rsaquo;</button>
+  <span class="spacer"></span>
+  <span id="build" title="読み込まれている版">html r3</span>
+  <button id="btn-smaller" type="button">A&minus;</button>
+  <button id="btn-larger" type="button">A&plus;</button>
+</footer>
+
+<div id="overlay" hidden>
+  <div id="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-head">
+      <strong id="sheet-title">目次</strong>
+      <button id="btn-close-sheet" type="button">閉じる</button>
+    </div>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept=".epub,application/epub+zip" hidden>
+
+<script type="module" src="js/app.js?v=3"></script>
+</body>
+</html>
