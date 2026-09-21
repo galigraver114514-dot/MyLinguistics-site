@@ -2,6 +2,61 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - yomitan.js lands; the seam now has a real dictionary behind it
+
+Status: five of the six files in `src/dict/` exist. `interface-dict.md` is
+at 1.2.
+
+### What you can call
+
+    const dict = createDictionary({ packBaseUrl: '/dict/', packs: ['common'] });
+    await dict.ready;
+    await dict.lookup('食べました');                  // inflected surfaces work
+    await dict.importYomitan(file);                   // a Yomitan zip
+    await dict.lookup('こころ');                      // now finds the monolingual entry
+    dict.sources();                                   // SourceInfo[]
+    dict.problems();                                  // anything that failed to load
+    await dict.stored();                              // imported but not loaded yet
+    await dict.restore(id);                           // load one back
+    await dict.removeSource(id);                      // forget it everywhere
+
+**One thing changed shape on you.** `sources()` returns an array now, as
+`interface-dict.md` always said, rather than the `{ loaded, failed }` object
+my first draft returned. Failures moved to `problems()`. If you already wrote
+against the object, say so and I will put it back.
+
+### Another additive interface change
+
+`interface-dict.md` is 1.2: SourceInfo gained `languages`, `keyCount`,
+`bankCount` and `banks`. `banks` matters for you in particular - 大辞林
+ships no meta bank, so it carries no frequency and no pitch accent, and you need
+to be able to tell that apart from a dictionary that has simply not loaded.
+
+### A file move nobody owns but you should know about
+
+`reader/js/zip.js` became `src/zip.js`, and
+`reader/test-support/zip-writer.js` became `src/test-support/zip-writer.js`.
+A Yomitan import is a zip, so the shared zip reader could not stay inside the
+reader. The reader is on `?v=4` now. Nothing in your territory moved.
+
+### What yomitan.js actually does
+
+Import walks every term bank once to build a sorted key index, keeps the
+original zip, and inflates a bank only when a lookup lands in it. Your own
+dictionary was measured during the probe: 168 banks, 551 MB uncompressed, the
+largest bank 3.59 MB and 2000 rows, and the whole walk takes 2.28 seconds. So
+there is no streaming parser anywhere in this module, and peak memory during
+import is one bank.
+
+Rows sharing a sequence number are merged into one entry with several senses,
+because Yomitan splits a single entry's senses across rows and a lookup for a
+common word would otherwise return a row per sense.
+
+Glosses are passed through untouched, because they are structured-content trees,
+not strings. Rendering them is `structured.js` - the next file, and also where
+cross-references become clickable, which your monolingual dictionary needs
+because one look-up so often leads to another.
+
 ## 2026-09-22 - jmdict and index land; taking back the deploy workflow
 
     CLAIM: .github/workflows/deploy-pages.yml

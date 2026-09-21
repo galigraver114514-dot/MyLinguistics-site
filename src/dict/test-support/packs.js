@@ -3,6 +3,7 @@
  * it stays inside agent-reader's territory.
  */
 import { gzipSync } from 'node:zlib';
+import { makeZip } from '../../test-support/zip-writer.js';
 
 export function word(id, kanji, kana, glosses, options = {}) {
   return {
@@ -64,3 +65,66 @@ export function fetchMap(map) {
     return Promise.resolve(new Response('', { status: 404 }));
   };
 }
+
+
+/* ---- Yomitan dictionary fixtures ---- */
+
+export function yomitanIndex(overrides = {}) {
+  return Object.assign({
+    title: 'テスト辞典',
+    revision: 'test;2026-01-01',
+    format: 3,
+    author: 'tests',
+    description: 'a dictionary that exists only in this test'
+  }, overrides);
+}
+
+/**
+ * One term bank row, in Yomitan's positional format.
+ * [term, reading, definitionTags, rules, score, glossary, sequence, termTags]
+ */
+export function yomitanRow(term, reading, glosses, options = {}) {
+  return [
+    term,
+    reading || '',
+    options.definitionTags || '',
+    options.rules || '',
+    options.score === undefined ? 0 : options.score,
+    glosses,
+    options.sequence === undefined ? 1 : options.sequence,
+    options.termTags || ''
+  ];
+}
+
+/**
+ * A Yomitan dictionary zip.
+ * @param {Array<Array>} banks one array of rows per term bank
+ */
+export function yomitanZip(banks, options = {}) {
+  // options.index === null omits index.json entirely, which is how a zip that
+  // is not a dictionary at all is built.
+  const files = options.index === null
+    ? []
+    : [{ name: 'index.json', data: JSON.stringify(yomitanIndex(options.index)) }];
+  banks.forEach(function (rows, i) {
+    files.push({ name: 'term_bank_' + (i + 1) + '.json', data: JSON.stringify(rows) });
+  });
+  (options.tagBanks || []).forEach(function (tags, i) {
+    files.push({ name: 'tag_bank_' + (i + 1) + '.json', data: JSON.stringify(tags) });
+  });
+  return makeZip(files);
+}
+
+/** A short structured-content glossary, the shape real dictionaries use. */
+export function structuredGloss(reading, body) {
+  return {
+    type: 'structured-content',
+    content: [
+      { tag: 'span', data: { name: '見出部' }, content: [
+        { tag: 'span', style: { fontWeight: 'bold' }, data: { name: '見出仮名' }, content: reading }
+      ] },
+      { tag: 'div', content: body }
+    ]
+  };
+}
+

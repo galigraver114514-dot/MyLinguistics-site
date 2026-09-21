@@ -13,10 +13,10 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=3';
-import { buildChapter } from './text-model.js?v=3';
-import { prepareAndMount } from './render.js?v=3';
-import { SAMPLE_BOOK } from './sample.js?v=3';
+import { openEpub } from './epub.js?v=4';
+import { buildChapter } from './text-model.js?v=4';
+import { prepareAndMount } from './render.js?v=4';
+import { SAMPLE_BOOK } from './sample.js?v=4';
 
 /**
  * Bumped together with the query strings above.
@@ -27,7 +27,7 @@ import { SAMPLE_BOOK } from './sample.js?v=3';
  * running version is visible on screen, which is the only way to tell a stale
  * cache apart from a real bug from a bug report.
  */
-const APP_VERSION = 'js r3';
+const APP_VERSION = 'js r4';
 
 const SETTINGS_KEY = 'reader.settings.v2';
 const POSITIONS_KEY = 'reader.positions.v2';
@@ -752,7 +752,7 @@ applyLayout();
 updatePageInfo();
 
 const buildEl = document.getElementById('build');
-if (buildEl) buildEl.textContent = 'html r3 · ' + APP_VERSION;
+if (buildEl) buildEl.textContent = 'html r4 · ' + APP_VERSION;
 
 // If the previous run never reached "done", its last stage is still in storage.
 // Say so, instead of leaving the next run to reproduce the same freeze blind.

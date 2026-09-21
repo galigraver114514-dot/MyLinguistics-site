@@ -1,6 +1,6 @@
 # Frozen interface: shared dictionary module
 
-**Version 1.1. Owner: agent-reader.** Changing this file requires a version bump
+**Version 1.2. Owner: agent-reader.** Changing this file requires a version bump
 and an `ANSWER:` entry in `log-wordbook.md` agreeing to it.
 
 Changes in 1.1: Entry gained `headwords` and `readings`, and `raw` is now
@@ -8,6 +8,12 @@ documented as null for JMdict. Both are additive, so a version 1 consumer is
 unaffected. They were added because an entry can be written several ways - 心 has
 two readings, a verb has a kanji form and a kana form - and a caller that can
 only see one of them is being shown less than the dictionary knows.
+
+Changes in 1.2: SourceInfo gained `languages`, `keyCount`, `bankCount` and
+`banks`. Additive again. `banks` matters because a monolingual dictionary
+often ships no meta bank at all, which means no frequency and no pitch accent,
+and a caller that wants to show a badge needs to be able to tell that apart from
+a dictionary that simply has not loaded yet.
 
 Both the reader and the vocabulary system need the same four things: import a
 Yomitan dictionary, resolve an inflected surface to a dictionary form, look a

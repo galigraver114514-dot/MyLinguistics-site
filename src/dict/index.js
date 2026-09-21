@@ -1,25 +1,39 @@
 /**
  * The shared dictionary module.
  *
- * Contract: docs/coordination/interface-dict.md version 1. Both the reader and
- * the wordbook consume this and neither owns a second implementation.
+ * Contract: docs/coordination/interface-dict.md. Both the reader and the
+ * wordbook consume this and neither owns a second implementation.
  *
- * Everything here is deliberately synchronous once ready. The device probe
- * showed a full JMdict pack parsing and indexing in 2.4 seconds, so there is
- * nothing to hide behind a lazy shard loader, and an async lookup would only
- * add latency to the one interaction that has to feel instant.
+ * Two kinds of source, and they are not interchangeable:
+ *
+ *   JMdict packs    bundled, Japanese to English, always available. Cheap
+ *                   enough to load eagerly: 2.4 seconds for the full pack.
+ *   Yomitan imports local, usually monolingual, and the one that actually
+ *                   answers a question about nuance. Expensive to hold - the
+ *                   zip stays in memory so banks can be inflated on demand -
+ *                   so they are imported and restored explicitly rather than
+ *                   at startup.
  */
 import { loadJmdictPack, PACK_FILES, JMDICT_ATTRIBUTION } from './jmdict.js';
+import { importYomitan as importYomitanFile, restoreYomitan, listYomitanSources, removeYomitan } from './yomitan.js';
+import { openStore } from './store.js';
 import { candidates as buildCandidates } from './candidates.js';
 
 export { JMDICT_ATTRIBUTION, PACK_FILES };
+export { importYomitanFile as importYomitanFromFile, restoreYomitan, listYomitanSources, removeYomitan };
 
-const NOT_YET = 'not implemented yet; see docs/coordination/interface-dict.md';
+const DEFAULT_STORAGE = 'ml-dict';
+
+function describe(error) {
+  return String(error && error.message ? error.message : error);
+}
 
 /**
  * @param {{
  *   packs?: string[],
  *   packBaseUrl?: string,
+ *   storageName?: string,
+ *   restore?: string[],
  *   fetchImpl?: Function,
  *   onProgress?: Function
  * }} [options]
@@ -27,20 +41,39 @@ const NOT_YET = 'not implemented yet; see docs/coordination/interface-dict.md';
 export function createDictionary(options = {}) {
   const base = options.packBaseUrl || '/dict/';
   const packs = Array.isArray(options.packs) ? options.packs : ['common'];
+  const storageName = options.storageName || DEFAULT_STORAGE;
+  const autoRestore = Array.isArray(options.restore) ? options.restore : [];
 
   const sources = [];
-  const errors = [];
+  const failures = [];
+  let closed = false;
+  let storePromise = null;
 
   function notify(event) {
     if (typeof options.onProgress === 'function') options.onProgress(event);
   }
 
-  const ready = (async function load() {
+  function hasStorage() {
+    return typeof indexedDB !== 'undefined';
+  }
+
+  function getStore() {
+    if (!hasStorage()) return Promise.reject(new Error('this environment has no IndexedDB'));
+    if (!storePromise) {
+      storePromise = openStore({ name: storageName }).catch(function (error) {
+        storePromise = null;
+        throw error;
+      });
+    }
+    return storePromise;
+  }
+
+  async function loadPacks() {
     for (let i = 0; i < packs.length; i++) {
       const pack = packs[i];
       const file = PACK_FILES[pack];
       if (!file) {
-        errors.push({ pack: pack, error: 'unknown pack name' });
+        failures.push({ id: pack, stage: 'pack', error: 'unknown pack name' });
         continue;
       }
       const url = base.replace(/\/?$/, '/') + file;
@@ -58,19 +91,44 @@ export function createDictionary(options = {}) {
         sources.push(source);
         notify({ stage: 'pack-done', pack: pack, entries: source.entryCount });
       } catch (error) {
-        // One missing pack must not take the dictionary down; the others are
-        // still useful and the failure is reported through sources().
-        errors.push({ pack: pack, url: url, error: String(error && error.message ? error.message : error) });
-        notify({ stage: 'pack-failed', pack: pack, error: String(error && error.message ? error.message : error) });
+        // One missing pack must not take the dictionary down. The others are
+        // still useful, and the failure is reported through problems().
+        failures.push({ id: 'jmdict:' + pack, stage: 'pack', url: url, error: describe(error) });
+        notify({ stage: 'pack-failed', pack: pack, error: describe(error) });
       }
     }
-    notify({ stage: 'ready', sources: sources.length, errors: errors.length });
+  }
+
+  async function loadRestored() {
+    for (let i = 0; i < autoRestore.length; i++) {
+      try {
+        await restore(autoRestore[i]);
+      } catch (error) {
+        failures.push({ id: autoRestore[i], stage: 'restore', error: describe(error) });
+      }
+    }
+  }
+
+  async function restore(id) {
+    if (!hasStorage()) throw new Error('this environment has no IndexedDB');
+    const store = await getStore();
+    const existing = sources.some(function (source) { return source.id === id; });
+    if (existing) return null;
+    const source = await restoreYomitan(store, id);
+    sources.push(source);
+    notify({ stage: 'restored', id: id, entries: source.entryCount });
+    return source;
+  }
+
+  const ready = (async function load() {
+    await loadPacks();
+    await loadRestored();
+    notify({ stage: 'ready', sources: sources.length, failures: failures.length });
   })();
 
-  function eachSource(fn) {
+  function findSource(id) {
     for (let i = 0; i < sources.length; i++) {
-      const result = fn(sources[i]);
-      if (result && result.length) return result;
+      if (sources[i].id === id) return sources[i];
     }
     return null;
   }
@@ -85,19 +143,25 @@ export function createDictionary(options = {}) {
 
     /**
      * Look a surface up. Accepts a plain string or { surface, token }.
-     * Resolves to the shared Entry shape.
+     *
+     * Sources are asked in load order, so an imported monolingual dictionary
+     * added after the packs is consulted after them. Ordering across sources is
+     * the caller's business: a JP-JP definition is usually wanted over a JP-EN
+     * gloss, but that is a display decision, not a lookup one.
      */
     async lookup(text, lookupOptions) {
       await ready;
+      if (closed) return [];
       const input = typeof text === 'string' ? { surface: text } : (text || {});
-      const list = buildCandidates(input.surface, input.token || lookupOptions && lookupOptions.token);
+      const token = input.token || (lookupOptions && lookupOptions.token);
+      const list = buildCandidates(input.surface, token);
       if (list.length === 0) return [];
 
       const merged = [];
       const seen = new Set();
       for (let c = 0; c < list.length; c++) {
         for (let s = 0; s < sources.length; s++) {
-          const hits = sources[s].lookup([list[c]]);
+          const hits = await sources[s].lookup([list[c]]);
           for (let h = 0; h < hits.length; h++) {
             const entry = hits[h];
             const key = entry.source + ':' + entry.id;
@@ -110,39 +174,86 @@ export function createDictionary(options = {}) {
       return merged;
     },
 
-    /** Kanji detail, when a pack that carries it is loaded. */
+    /** Kanji detail, when a source that carries it is loaded. */
     async kanji(character) {
       await ready;
-      return eachSource(function (source) { return source.kanji(character); });
+      for (let i = 0; i < sources.length; i++) {
+        const detail = await sources[i].kanji(character);
+        if (detail) return detail;
+      }
+      return null;
     },
 
-    /** Everything loaded, plus anything that failed to load. */
+    /** Everything currently in memory. */
     sources() {
-      return {
-        loaded: sources.map(function (source) {
-          return {
-            id: source.id,
-            kind: source.kind,
-            title: source.title,
-            revision: source.revision,
-            licence: source.licence,
-            attribution: source.attribution,
-            entryCount: source.entryCount,
-            languages: source.languages
-          };
-        }),
-        failed: errors.slice()
-      };
+      return sources.map(function (source) {
+        return {
+          id: source.id,
+          kind: source.kind,
+          title: source.title,
+          revision: source.revision,
+          licence: source.licence,
+          attribution: source.attribution,
+          entryCount: source.entryCount,
+          languages: source.languages
+        };
+      });
     },
 
-    /** Importing a Yomitan dictionary is the next file in this module. */
-    async importYomitan() {
-      throw new Error('Yomitan import ' + NOT_YET);
+    /** Anything that failed to load or restore, in the order it failed. */
+    problems() {
+      return failures.slice();
     },
 
+    /**
+     * Import a Yomitan dictionary from a File. Persists it when storage is
+     * available, so the next session can restore it without the file.
+     */
+    async importYomitan(file, onProgress) {
+      await ready;
+      let store = null;
+      if (hasStorage()) {
+        try {
+          store = await getStore();
+        } catch (error) {
+          failures.push({ id: 'storage', stage: 'import', error: describe(error) });
+        }
+      }
+      const source = await importYomitanFile({
+        file: file,
+        store: store,
+        onProgress: typeof onProgress === 'function' ? onProgress : options.onProgress
+      });
+      sources.push(source);
+      notify({ stage: 'imported', id: source.id, entries: source.entryCount });
+      return source.result;
+    },
+
+    /** Load a previously imported dictionary back into memory. */
+    restore: restore,
+
+    /** What is stored but not loaded. Cheap: it reads metadata only. */
+    async stored() {
+      if (!hasStorage()) return [];
+      const store = await getStore();
+      return listYomitanSources(store);
+    },
+
+    /** Forget a source, in memory and on disk. */
     async removeSource(id) {
       for (let i = sources.length - 1; i >= 0; i--) {
-        if (sources[i].id === id) sources.splice(i, 1);
+        if (sources[i].id === id) {
+          if (typeof sources[i].clearCache === 'function') sources[i].clearCache();
+          sources.splice(i, 1);
+        }
+      }
+      if (hasStorage()) {
+        try {
+          const store = await getStore();
+          await removeYomitan(store, id);
+        } catch (error) {
+          failures.push({ id: id, stage: 'remove', error: describe(error) });
+        }
       }
     },
 
@@ -155,6 +266,10 @@ export function createDictionary(options = {}) {
     },
 
     close() {
+      closed = true;
+      for (let i = 0; i < sources.length; i++) {
+        if (typeof sources[i].clearCache === 'function') sources[i].clearCache();
+      }
       sources.length = 0;
     }
   };
