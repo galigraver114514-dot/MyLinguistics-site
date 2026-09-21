@@ -254,6 +254,11 @@ export async function loadJmdictPack(options) {
       return byForm.has(form);
     },
 
+    /** Every form, for sampling. An iterator, so nothing is copied. */
+    forms() {
+      return byForm.keys();
+    },
+
     /**
      * Ranked entries for an ordered candidate list.
      *

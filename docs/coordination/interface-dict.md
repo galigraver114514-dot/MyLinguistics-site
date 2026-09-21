@@ -1,6 +1,6 @@
 # Frozen interface: shared dictionary module
 
-**Version 1.3. Owner: agent-reader.** Changing this file requires a version bump
+**Version 1.4. Owner: agent-reader.** Changing this file requires a version bump
 and an `ANSWER:` entry in `log-wordbook.md` agreeing to it.
 
 Changes in 1.1: Entry gained `headwords` and `readings`, and `raw` is now
@@ -22,6 +22,12 @@ more: nothing existing changed shape, and 1.2 listed some fields in
 `sources()` that the implementation was still returning as a subset, which is
 now fixed rather than extended.
 
+Changes in 1.4: `src/dict/tokenize.js` exists, Dictionary gained
+`lexicon()` with `has`, `count` and `sample`, and the Tokenisation
+section below is new. Additive: nothing existing changed shape. The tokeniser's
+lexicon is the loaded dictionary indexes themselves, and `sample` answers the
+wordbook's request for a way to reach the shared word pool.
+
 Both the reader and the vocabulary system need the same four things: import a
 Yomitan dictionary, resolve an inflected surface to a dictionary form, look a
 form up, and render a definition. This is that module, and nothing else.
@@ -34,6 +40,7 @@ form up, and render a definition. This is that module, and nothing else.
       yomitan.js       Yomitan zip import, per-bank inflation, search index
       candidates.js    surface -> candidate dictionary forms
       structured.js    Yomitan structured-content -> DOM nodes
+      tokenize.js      text -> tokens, over the loaded dictionary index
       store.js         IndexedDB persistence
 
     tests/dict-*.test.js
@@ -66,6 +73,7 @@ and `jsdom`.
       asset(sourceId, path)  -> Promise<{ data: Uint8Array, mediaType } | null>
       assetUrl(sourceId, path) -> Promise<string | null>  blob URL; caller revokes
       dictionaryStyles(id)   -> Promise<string | null>    the zip's styles.css
+      lexicon()              -> { has(form): boolean, count(): number, sample(n): string[] }
       usage()                -> Promise<{ bytes, quota }>
       close()                -> void
     }
@@ -149,6 +157,37 @@ img a`. Required behaviour, all implemented:
 would otherwise have to skip every monolingual sense, which is most of them.
 Images and stylesheets are read from the zip through the facade above, so the
 renderer itself needs no zip access.
+
+## Tokenisation
+
+Both apps need the same two things: split a passage into words, and find the
+word under a tap. `src/dict/tokenize.js` is that module and the only
+implementation; the wordbook's `src/lexicon/tokenize.js` is its predecessor
+and is deleted once this is wired.
+
+The lexicon is the point. A loaded dictionary index already holds every
+headword and reading, so maximal matching against it needs no model download
+and no new data. `lexicon()` is that index as a lexicon - synchronous,
+allocation-free, consulting the indexes already in memory.
+
+    lexicon() = { has(form) -> boolean, count() -> number, sample(n) -> string[] }
+
+    segment(text, { lexicon?, maxLength? }) -> Token[]
+    longestMatch(text, lexicon, options)    -> Token[]
+    scriptRuns(text)                        -> Token[]      no lexicon needed
+    contentTokens(text, { lexicon? })       -> string[]     content surfaces only
+    splitSentences(text)                    -> { text, start, end }[]
+    tokenAt(tokens, offset)                 -> Token | null   tap to look up
+    isContent(surface), classify(surface), classOf(cp), walk(text)
+
+    Token = { surface: string, start: number, end: number, cls: string }
+
+Offsets are UTF-16 into the original string, so a lookup can always be traced
+back to the text the learner touched. `segment` uses the lexicon when one is
+given and script runs when not, so no caller branches on it. Where nothing
+matches, the gap up to the next match is script-run segmented rather than the
+rest of a hiragana run being swallowed: `犬がいます` becomes `犬 + が +
+います`, not `犬 + がいます`.
 
 ## Performance budget, measured on the target device
 

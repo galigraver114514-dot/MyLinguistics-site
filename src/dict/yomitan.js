@@ -311,6 +311,11 @@ function makeSource(state) {
       return refsFor(form) !== null;
     },
 
+    /** Every indexed form, for sampling. */
+    forms() {
+      return keys;
+    },
+
     /** Synchronous, like the JMdict source: the index is in memory. */
     lookup(candidateList) {
       const byBank = new Map();

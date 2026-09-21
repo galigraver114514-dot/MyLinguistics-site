@@ -184,6 +184,57 @@ export function createDictionary(options = {}) {
       return null;
     },
 
+    /**
+     * A read-only lexicon over every loaded source, for segmentation and for
+     * "is this a word" checks. has() is synchronous and consults the indexes
+     * that are already in memory, so it copies nothing.
+     */
+    lexicon() {
+      return {
+        has(form) {
+          if (typeof form !== 'string' || form.length === 0) return false;
+          for (let i = 0; i < sources.length; i++) {
+            if (typeof sources[i].has === 'function' && sources[i].has(form)) return true;
+          }
+          return false;
+        },
+        count() {
+          let total = 0;
+          for (let i = 0; i < sources.length; i++) {
+            if (typeof sources[i].formCount === 'number') total += sources[i].formCount;
+            else if (typeof sources[i].keyCount === 'number') total += sources[i].keyCount;
+          }
+          return total;
+        },
+        /**
+         * A uniform random sample of forms from every loaded source, by
+         * reservoir sampling, so a word stream can draw from the whole
+         * dictionary without materialising half a million strings.
+         */
+        sample(count) {
+          const wanted = Math.max(0, Math.floor(count) || 0);
+          const out = [];
+          if (wanted === 0) return out;
+          let seen = 0;
+          for (let i = 0; i < sources.length; i++) {
+            if (typeof sources[i].forms !== 'function') continue;
+            const iterable = sources[i].forms();
+            for (const form of iterable) {
+              if (typeof form !== 'string' || form.length === 0) continue;
+              if (seen < wanted) {
+                out.push(form);
+              } else {
+                const j = Math.floor(Math.random() * (seen + 1));
+                if (j < wanted) out[j] = form;
+              }
+              seen++;
+            }
+          }
+          return out;
+        }
+      };
+    },
+
     /** Raw bytes of a file inside an imported dictionary zip, or null. */
     async asset(sourceId, path) {
       await ready;
