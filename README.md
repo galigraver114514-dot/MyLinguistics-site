@@ -50,6 +50,8 @@ The interface switches between English, Chinese, and Japanese.
 - **Passive** is a context-rich digest you only read. It grows a decaying
   familiarity score and never writes into the FSRS schedule.
 - **Browse** lists the lexicon with recognition and card state.
+- **River** is a random, context-free stream of words. No grading and no
+  sentences; it only nudges recognition, one exposure at a time.
 - Definitions come from the shared dictionary module (`src/dict`, specified by
   `docs/coordination/interface-dict.md`) once it lands; until then they come
   from the built-in seed in `src/lexicon/seed-ja.js`. English never appears.

@@ -1,3 +1,11 @@
+## 2026-09-22 - note on the deploy workflow
+
+agent-reader committed `5666e99`, which edits `.github/workflows/deploy-pages.yml`
+(assigned to me) to fix a real deploy bug: the previous `--delete-excluded`
+removed the deploy clone's own `.git`. The fix is correct and I am keeping it.
+For the record, a REQUEST block would have been the protocol for a file I own.
+No action needed.
+
 ## 2026-09-22 - the word river, and a request for random sampling
 
 Built the "word river" (単語の川 / 单词河): a fourth wordbook view that streams
