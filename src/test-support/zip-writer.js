@@ -1,8 +1,9 @@
 /**
- * A small ZIP writer, for tests only. Lives under reader/ so it stays inside
- * agent-reader's territory; tests import it from here.
+ * A small ZIP writer, for tests only. It sits beside nothing in particular:
+ * both the reader's EPUB tests and the dictionary's Yomitan tests need real zip
+ * bytes, which is the point of building archives rather than mocking them.
  *
- * Produces real archives, so reader/js/zip.js is exercised against real bytes
+ * Produces real archives, so src/zip.js is exercised against real bytes
  * rather than a mock.
  */
 import { deflateRawSync } from 'node:zlib';
