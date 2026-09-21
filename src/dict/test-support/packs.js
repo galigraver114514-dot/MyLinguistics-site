@@ -112,6 +112,11 @@ export function yomitanZip(banks, options = {}) {
   (options.tagBanks || []).forEach(function (tags, i) {
     files.push({ name: 'tag_bank_' + (i + 1) + '.json', data: JSON.stringify(tags) });
   });
+  // Anything else a real dictionary carries beside its banks: styles.css,
+  // images, fonts.
+  (options.files || []).forEach(function (file) {
+    files.push({ name: file.name, data: file.data });
+  });
   return makeZip(files);
 }
 

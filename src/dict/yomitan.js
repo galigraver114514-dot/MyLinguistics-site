@@ -35,6 +35,26 @@ function splitTags(value) {
   return value.split(/\s+/).filter(function (tag) { return tag.length > 0; });
 }
 
+// Enough of a map for what a dictionary actually ships: illustrations and its
+// own stylesheet. Anything else is served as opaque bytes.
+const MEDIA_TYPES = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  svg: 'image/svg+xml',
+  css: 'text/css',
+  woff: 'font/woff',
+  woff2: 'font/woff2'
+};
+
+function mediaTypeFor(path) {
+  const match = String(path).toLowerCase().match(/\.([a-z0-9]+)$/);
+  return (match && MEDIA_TYPES[match[1]]) || 'application/octet-stream';
+}
+
 async function readBytes(input) {
   if (!input) throw new Error('a Yomitan import needs a file, an ArrayBuffer or a Uint8Array');
   if (input instanceof Uint8Array) return input;
@@ -235,6 +255,27 @@ function makeSource(state) {
     return out;
   }
 
+  // A dictionary's images and styles.css live inside the same zip, so reading
+  // them is this source's job and not the renderer's.
+  async function readAsset(path) {
+    if (typeof path !== 'string' || path.length === 0) return null;
+    const clean = path.replace(/^\.?\//, '').replace(/\\/g, '/');
+    const data = await state.archive.read(clean);
+    if (data === null) return null;
+    return { data: data, mediaType: mediaTypeFor(clean) };
+  }
+
+  async function assetUrl(path) {
+    const asset = await readAsset(path);
+    if (!asset) return null;
+    if (typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return null;
+    return URL.createObjectURL(new Blob([asset.data], { type: asset.mediaType }));
+  }
+
+  function readStyles() {
+    return state.archive.readText('styles.css');
+  }
+
   const source = {
     id: state.id,
     kind: 'yomitan',
@@ -323,6 +364,21 @@ function makeSource(state) {
 
     kanji() {
       return null;
+    },
+
+    /** Raw bytes of one file inside the dictionary zip, or null. */
+    asset(path) {
+      return readAsset(path);
+    },
+
+    /** A blob URL for one asset, or null. The caller owns revoking it. */
+    assetUrl(path) {
+      return assetUrl(path);
+    },
+
+    /** The dictionary's own styles.css text, or null when it ships none. */
+    styles() {
+      return readStyles();
     },
 
     clearCache() {

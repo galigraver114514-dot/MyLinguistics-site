@@ -184,9 +184,35 @@ export function createDictionary(options = {}) {
       return null;
     },
 
-    /** Everything currently in memory. */
+    /** Raw bytes of a file inside an imported dictionary zip, or null. */
+    async asset(sourceId, path) {
+      await ready;
+      const source = findSource(sourceId);
+      if (!source || typeof source.asset !== 'function') return null;
+      return source.asset(path);
+    },
+
+    /** A blob URL for one dictionary asset, or null. The caller revokes it. */
+    async assetUrl(sourceId, path) {
+      await ready;
+      const source = findSource(sourceId);
+      if (!source || typeof source.assetUrl !== 'function') return null;
+      return source.assetUrl(path);
+    },
+
+    /** An imported dictionary's own styles.css text, or null. */
+    async dictionaryStyles(sourceId) {
+      await ready;
+      const source = findSource(sourceId);
+      if (!source || typeof source.styles !== 'function') return null;
+      return source.styles();
+    },
+
+    /** Everything currently in memory, as SourceInfo (interface 1.2). */
     sources() {
       return sources.map(function (source) {
+        if (typeof source.info === 'function') return source.info();
+        // JMdict packs do not report an index size or bank layout.
         return {
           id: source.id,
           kind: source.kind,
@@ -195,7 +221,10 @@ export function createDictionary(options = {}) {
           licence: source.licence,
           attribution: source.attribution,
           entryCount: source.entryCount,
-          languages: source.languages
+          languages: source.languages || null,
+          keyCount: null,
+          bankCount: null,
+          banks: null
         };
       });
     },

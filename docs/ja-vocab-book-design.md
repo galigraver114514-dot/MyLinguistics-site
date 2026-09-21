@@ -1,6 +1,7 @@
 # Japanese Advanced Vocabulary Book - design
 
-Status: **draft for discussion**. Nothing here is implemented yet.
+Status: **partly implemented**. The local engine and its capture pipeline are
+built and tested; see Implementation status below and section 15.
 
 For an N1+ learner working toward native reading and writing. Companion
 documents: `ja-reader-design.md`, `ja-reader-dictionary.md`,
@@ -18,13 +19,25 @@ A first vertical slice is implemented and tested:
 | Passive exposure and digest | `src/lexicon/digest.js`, `Lexicon.digest` |
 | IndexedDB storage | `src/lexicon/db.js` |
 | Capture telemetry and operations | `src/lexicon/store.js` |
-| Review, passive, browse, and data UI | `src/lexicon/entry.js`, `wordbook.html` |
+| Word river (context-free stream) | `src/lexicon/river.js` |
+| Text segmentation | `src/lexicon/tokenize.js` |
+| Candidate funnel and frequency band | `src/lexicon/select.js` |
+| Frequency-list import | `src/lexicon/frequency.js`, `Lexicon.importFrequency` |
+| Automatic enrolment and inbox | `Lexicon.importText`, `Lexicon.listInbox` |
+| Card authoring by mode | `src/lexicon/authoring.js` |
+| Review, passive, river, inbox, browse UI | `src/lexicon/entry.js`, `study.html` |
 | Tests, including a real page boot | `tests/*.test.js` |
 
-Still to build: Yomitan dictionary import (streaming), reading-material import
-and tokenisation, automatic enrolment, nuance and collocation data, and the
-reader-side guide mode. Sections 5.3, 5.4, and 5.8 describe the intended
-behaviour; the local engine they need is now in place.
+Automatic enrolment, triage, manual capture, frequency import, backup
+restore, and look-only review are implemented and tested end to end.
+
+Still to build: a dictionary-backed morphological analyser (the current
+segmenter is script runs plus maximal matching; the real one is agreed to live
+at `src/dict/tokenize.js` and be shared with the reader), Yomitan dictionary
+import into the wordbook (the module supports it; its structured-content
+renderer is the last file), the self-built mid-band frequency list, the
+reader-side guide mode, and the nuance, collocation and synonym data that
+sections 7 and 18 mark as needing an external source.
 
 ## 0. Summary
 
@@ -194,6 +207,13 @@ Passive mode is only useful if the lexicon fills itself. On import of a text:
 Triage is then optional: unapproved entries still feed the passive digest. Caps
 apply per import and per day, the candidate count is shown, and bulk rejection
 is one action. This is what makes "I did not have to hunt for words" true.
+
+Implemented in `Lexicon.importText` with `src/lexicon/tokenize.js` and
+`src/lexicon/select.js`. The segmenter is script runs upgraded to maximal
+matching as soon as a frequency list or a dictionary's key index supplies a
+lexicon; the real morphological analyser, which adds a reading and a basic form
+per token, is agreed to live at `src/dict/tokenize.js` and serve both apps.
+Nothing is scheduled by approving a candidate until the learner approves it.
 
 ### 5.5 Exposure, kept out of FSRS
 
@@ -539,11 +559,25 @@ progress, which is the whole point of the passive track.
 
 ### 17.6 What is implemented today
 
-`Lexicon.recordEncounter` counts distinct sentences and promotes a word to
-`inbox` at three. `Lexicon.digest` applies the score above.
-`Lexicon.markKnown` removes a word from the digest. The frequency band and the
-tokeniser are wired but idle because reading import is the next phase; the
-current build seeds the 18 Japanese words instead.
+The whole funnel is live.
+
+- `Lexicon.recordEncounter` counts **distinct** sentences and promotes a word
+  to `inbox` at three.
+- `Lexicon.importText` tokenises a passage, drops known, carded, dismissed and
+  ignored words, keeps words that recur at least twice (configurable), applies
+  the frequency-band weight, and writes the survivors to the inbox with their
+  source sentences.
+- `Lexicon.importFrequency` reads a word/rank list, stores it, and stamps the
+  rank onto matching words. The same list is the lexicon for maximal matching,
+  so segmentation sharpens the moment one is imported.
+- `Lexicon.approveCandidate` authors the sense and its cards by rule
+  (`src/lexicon/authoring.js`); `Lexicon.rejectCandidate` dismisses the
+  candidate and adds it to the ignore list.
+- `Lexicon.digest` applies the ranking in 17.4, and `Lexicon.markKnown`
+  removes a word from it.
+
+What is still missing is not the funnel but its inputs: a real morphological
+analyser, and the self-built mid-band list itself (section 4, source B).
 
 ## 18. Card modes in detail
 

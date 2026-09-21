@@ -25,7 +25,9 @@ var state = {
   stats: null,
   digest: [],
   digestSeen: {},
-  browseFilter: ''
+  inbox: [],
+  browseFilter: '',
+  lookOnly: false
 };
 
 /* English fallbacks keep the engine usable when loaded without the site runtime
@@ -55,7 +57,31 @@ var FALLBACK = {
   'wb.due.hour': '{n}h',
   'wb.due.day': '{n}d',
   'wb.due.month': '{n}mo',
-  'wb.due.year': '{n}y'
+  'wb.due.year': '{n}y',
+  'wb.tab.inbox': 'Inbox',
+  'wb.inbox.count': '{n} waiting',
+  'wb.inbox.empty': 'Nothing waiting.',
+  'wb.inbox.seen': '{n} sentences',
+  'wb.inbox.approve': 'Make cards',
+  'wb.inbox.reject': 'Ignore',
+  'wb.inbox.approved': '{word}: {n} cards made.',
+  'wb.mine.done': '{word} was added.',
+  'wb.mine.missing': 'A word is needed.',
+  'wb.import.result': '{n} candidates from {s} sentences.',
+  'wb.freq.result': '{n} ranks imported.',
+  'wb.restore.result': 'Restored {n} words.',
+  'wb.restore.failed': 'That file could not be read.',
+  'wb.lookOnly': 'Look only',
+  'wb.lookOnly.on': 'Look only: the answer is always shown.',
+  'wb.next': 'Next',
+  'wb.mode.recognize': 'Recognition',
+  'wb.mode.reading': 'Reading',
+  'wb.mode.cloze': 'Cloze',
+  'wb.mode.produce': 'Output',
+  'wb.mode.fill': 'Fill in',
+  'wb.mode.sentence': 'Sentence',
+  'wb.match.exact': 'Exact match.',
+  'wb.match.diff': 'You wrote {a}; the word is {b}.'
 };
 
 function formatDue(ms) {
@@ -103,6 +129,17 @@ function percent(fraction) {
   if (!fraction || fraction < 0) return 0;
   if (fraction > 1) return 100;
   return Math.round(fraction * 100);
+}
+
+/* One label per card mode. Older builds only knew recognition and output; an
+ * unknown mode falls back to those rather than showing its raw name. */
+function modeLabel(mode) {
+  var key = 'wb.mode.' + mode;
+  var text = tText(key, null);
+  if (text === key) {
+    return isOutputMode(mode) ? tText('wb.mode.output') : tText('wb.mode.recognition');
+  }
+  return text;
 }
 
 /* ------------------------------------------------------------------ stats */
@@ -175,22 +212,28 @@ function renderCard() {
   var sense = state.senseById[card.senseId] || { definition: {}, recognition: {} };
   var word = state.wordById[card.wordId] || { id: card.wordId, lemma: card.wordId, reading: '' };
   var definition = sense.definition || {};
-  var isOutput = isOutputMode(card.mode);
-  var flipped = state.flipped;
+  var mode = card.mode;
+  var isOutput = isOutputMode(mode);
+  var isCloze = mode === 'cloze';
+  var lookOnly = state.lookOnly;
+  var flipped = state.flipped || lookOnly;
+  var fullSentence = card.context && card.context.ja ? card.context.ja : '';
 
   el('wbCounter').textContent = (state.index + 1) + ' / ' + state.queue.length;
   el('wbProgress').style.width = Math.round((state.index / state.queue.length) * 100) + '%';
-  el('wbModeLabel').textContent = isOutput ? tText('wb.mode.output') : tText('wb.mode.recognition');
+  el('wbModeLabel').textContent = modeLabel(mode);
 
   if (isOutput) {
     el('wbPrompt').textContent = flipped ? word.lemma : (definition.text || word.lemma);
+  } else if (isCloze && !flipped) {
+    el('wbPrompt').textContent = buildContext(card, word, true);
   } else {
     el('wbPrompt').textContent = word.lemma;
   }
   el('wbReading').textContent = flipped ? (word.reading || '') : '';
 
   var typeWrap = el('wbTypeWrap');
-  if (isOutput) {
+  if (isOutput && !lookOnly) {
     show(typeWrap, true);
     el('wbInput').disabled = flipped;
   } else {
@@ -202,12 +245,12 @@ function renderCard() {
   definitionNode.textContent = flipped ? (definition.text || '') : '';
 
   var contextNode = el('wbContext');
-  var contextText = buildContext(card, word, isOutput && !flipped);
+  var contextText = isCloze ? (flipped ? fullSentence : '') : buildContext(card, word, isOutput && !flipped);
   show(contextNode, !!contextText);
   contextNode.textContent = contextText;
 
   var toleranceNode = el('wbTolerance');
-  if (isOutput && flipped) {
+  if (isOutput && flipped && !lookOnly) {
     show(toleranceNode, true);
     toleranceNode.textContent = compareAnswer(el('wbInput').value, word.lemma);
   } else {
@@ -223,17 +266,27 @@ function renderCard() {
 
   var gradeButtons = document.querySelectorAll('#wbGrades [data-rating]');
   for (var i = 0; i < gradeButtons.length; i++) {
-    gradeButtons[i].disabled = !flipped;
+    gradeButtons[i].disabled = !flipped || lookOnly;
   }
+  show(el('wbNext'), lookOnly);
+  show(el('wbFlip'), !lookOnly);
   el('wbFlip').textContent = flipped ? tText('wb.flipBack') : tText('wb.flip');
+
+  var lookButton = el('wbLookOnly');
+  if (lookButton) lookButton.setAttribute('aria-pressed', lookOnly ? 'true' : 'false');
+  var lookNote = el('wbLookNote');
+  if (lookNote) {
+    show(lookNote, lookOnly);
+    lookNote.textContent = lookOnly ? tText('wb.lookOnly.on') : '';
+  }
 }
 
 function compareAnswer(typed, answer) {
   var value = String(typed == null ? '' : typed).normalize('NFKC').trim();
   var expected = String(answer == null ? '' : answer).normalize('NFKC').trim();
   if (!value) return tText('wb.typeOptional');
-  if (value === expected) return 'Exact match.';
-  return 'You wrote ' + value + '; the word is ' + expected + '.';
+  if (value === expected) return tText('wb.match.exact');
+  return tText('wb.match.diff', { a: value, b: expected });
 }
 
 async function startReview() {
@@ -245,7 +298,7 @@ async function startReview() {
 }
 
 function flip() {
-  if (state.view !== 'review' || !currentCard()) return;
+  if (state.view !== 'review' || !currentCard() || state.lookOnly) return;
   state.flipped = !state.flipped;
   renderCard();
   if (state.flipped) {
@@ -258,6 +311,25 @@ async function grade(rating) {
   var card = currentCard();
   if (!card || !state.flipped) return;
   await state.lex.grade(card.id, rating, Date.now());
+  state.index += 1;
+  state.flipped = false;
+  await refresh();
+  renderCard();
+}
+
+/* Look-only review: the answer is always visible and the card advances by
+ * scrolling or tapping. It records an exposure and never a grade, which is
+ * exactly the distinction the passive track exists for. */
+function toggleLookOnly() {
+  state.lookOnly = !state.lookOnly;
+  state.flipped = state.lookOnly;
+  renderCard();
+}
+
+async function nextLookOnly() {
+  var card = currentCard();
+  if (!card) return;
+  await state.lex.recordExposure(card.senseId, 'lookonly', Date.now());
   state.index += 1;
   state.flipped = false;
   await refresh();
@@ -305,6 +377,121 @@ async function markKnown(senseIdValue) {
   await renderDigest();
 }
 
+/* ------------------------------------------------------------------ inbox
+ * Two ways in: candidates the miner left behind, and the learner's own
+ * capture. Approving is the only action that creates cards; nothing in the
+ * inbox is scheduled by FSRS until then.
+ */
+
+async function renderInbox() {
+  state.inbox = await state.lex.listInbox();
+  var count = el('wbInboxCount');
+  if (count) count.textContent = tText('wb.inbox.count', { n: state.inbox.length });
+  var list = el('wbInboxList');
+  if (!list) return;
+  if (!state.inbox.length) {
+    list.innerHTML = '<p class="muted">' + esc(tText('wb.inbox.empty')) + '</p>';
+    return;
+  }
+  list.innerHTML = state.inbox.map(function (item) {
+    var sentence = item.contexts && item.contexts[0] ? item.contexts[0].ja : '';
+    var rank = item.rank ? '<span class="wb-inbox-rank">' + esc(String(item.rank)) + '</span>' : '';
+    return '<article class="wb-inbox-item">' +
+      '<div class="wb-inbox-head"><strong>' + esc(item.wordKey) + '</strong>' +
+      '<span class="wb-inbox-seen">' + esc(tText('wb.inbox.seen', { n: item.count || 0 })) + '</span>' + rank + '</div>' +
+      (sentence ? '<p class="card-example">' + esc(sentence) + '</p>' : '') +
+      '<div class="wb-inbox-actions">' +
+      '<button class="btn btn-primary btn-small" type="button" data-approve="' + esc(item.wordKey) + '">' + esc(tText('wb.inbox.approve')) + '</button>' +
+      '<button class="btn btn-ghost btn-small" type="button" data-reject="' + esc(item.wordKey) + '">' + esc(tText('wb.inbox.reject')) + '</button>' +
+      '</div></article>';
+  }).join('');
+}
+
+async function approveCandidate(wordKey) {
+  var created = await state.lex.approveCandidate(wordKey, { dictionary: state.dictionary });
+  var note = el('wbInboxNote');
+  if (note && created) {
+    note.textContent = tText('wb.inbox.approved', { word: wordKey, n: created.cards.length });
+    show(note, true);
+  }
+  await refresh();
+  await renderInbox();
+}
+
+async function rejectCandidate(wordKey) {
+  await state.lex.rejectCandidate(wordKey);
+  await renderInbox();
+}
+
+async function mineAdd() {
+  var result = el('wbMineResult');
+  var lemma = el('wbMineWord').value.trim();
+  if (!lemma) {
+    result.textContent = tText('wb.mine.missing');
+    show(result, true);
+    return;
+  }
+  await state.lex.capture({
+    lemma: lemma,
+    reading: el('wbMineReading').value.trim(),
+    definition: el('wbMineDefinition').value.trim(),
+    sentence: el('wbMineSentence').value.trim()
+  });
+  result.textContent = tText('wb.mine.done', { word: lemma });
+  show(result, true);
+  ['wbMineWord', 'wbMineReading', 'wbMineDefinition', 'wbMineSentence'].forEach(function (id) {
+    el(id).value = '';
+  });
+  await refresh();
+}
+
+function readTextFile(file, done) {
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function () { done(String(reader.result == null ? '' : reader.result)); };
+  reader.readAsText(file, 'utf-8');
+}
+
+async function runImport() {
+  var text = el('wbImportText').value;
+  if (!text || !text.trim()) return;
+  var result = await state.lex.importText(text, { source: { kind: 'paste' } });
+  var node = el('wbImportResult');
+  node.textContent = tText('wb.import.result', { n: result.candidates, s: result.sentences });
+  show(node, true);
+  await renderInbox();
+}
+
+async function runFrequency() {
+  var text = el('wbFreqText').value;
+  if (!text || !text.trim()) return;
+  var result = await state.lex.importFrequency(text);
+  var node = el('wbFreqResult');
+  node.textContent = tText('wb.freq.result', { n: result.rows });
+  show(node, true);
+  await refresh();
+}
+
+async function runRestore(file) {
+  var node = el('wbRestoreResult');
+  try {
+    var text = await new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result == null ? '' : reader.result)); };
+      reader.onerror = function () { reject(reader.error || new Error('read failed')); };
+      reader.readAsText(file, 'utf-8');
+    });
+    var result = await state.lex.importJson(JSON.parse(text));
+    node.textContent = tText('wb.restore.result', { n: result.words });
+    show(node, true);
+    await refresh();
+    await renderInbox();
+  } catch (err) {
+    node.textContent = tText('wb.restore.failed');
+    show(node, true);
+  }
+}
+
 /* ----------------------------------------------------------------- browse */
 
 async function renderBrowse() {
@@ -348,9 +535,12 @@ async function resetAll() {
   if (!window.confirm(tText('wb.confirmReset'))) return;
   await state.lex.reset();
   state.digestSeen = {};
+  state.inbox = [];
+  state.lookOnly = false;
   await state.lex.seedFromLegacy(window.ML_DATA ? window.ML_DATA.vocab : [], SEED_DEFS);
   await refresh();
   await startReview();
+  await renderInbox();
 }
 
 /* ------------------------------------------------------------------ river
@@ -469,7 +659,7 @@ function toggleRiver() {
 
 function setView(view) {
   state.view = view;
-  var views = { review: 'wbReview', digest: 'wbDigest', browse: 'wbBrowse', river: 'wbRiver' };
+  var views = { review: 'wbReview', digest: 'wbDigest', river: 'wbRiver', inbox: 'wbInbox', browse: 'wbBrowse' };
   Object.keys(views).forEach(function (key) {
     show(el(views[key]), key === view);
   });
@@ -479,6 +669,7 @@ function setView(view) {
     else tabs[i].classList.remove('is-active');
   }
   if (view === 'digest') renderDigest();
+  if (view === 'inbox') renderInbox();
   if (view === 'browse') renderBrowse();
   if (view === 'river') startRiver();
   else stopRiver();
@@ -492,9 +683,32 @@ function bind() {
     });
   }
   el('wbCard').addEventListener('click', function () {
-    if (!state.flipped) flip();
+    if (state.lookOnly) nextLookOnly();
+    else if (!state.flipped) flip();
   });
   el('wbFlip').addEventListener('click', flip);
+  el('wbLookOnly').addEventListener('click', toggleLookOnly);
+  el('wbNext').addEventListener('click', nextLookOnly);
+  el('wbInboxRefresh').addEventListener('click', renderInbox);
+  el('wbMineAdd').addEventListener('click', mineAdd);
+  el('wbImportRun').addEventListener('click', runImport);
+  el('wbFreqRun').addEventListener('click', runFrequency);
+  el('wbImportFile').addEventListener('change', function (event) {
+    readTextFile(event.target.files && event.target.files[0], function (text) {
+      el('wbImportText').value = text;
+      runImport();
+    });
+  });
+  el('wbFreqFile').addEventListener('change', function (event) {
+    readTextFile(event.target.files && event.target.files[0], function (text) {
+      el('wbFreqText').value = text;
+      runFrequency();
+    });
+  });
+  el('wbRestoreFile').addEventListener('change', function (event) {
+    var file = event.target.files && event.target.files[0];
+    if (file) runRestore(file);
+  });
   var gradeButtons = document.querySelectorAll('#wbGrades [data-rating]');
   for (var g = 0; g < gradeButtons.length; g += 1) {
     gradeButtons[g].addEventListener('click', function (event) {
@@ -505,7 +719,8 @@ function bind() {
     if (state.view !== 'review') return;
     if (event.code === 'Space') {
       event.preventDefault();
-      flip();
+      if (state.lookOnly) nextLookOnly();
+      else flip();
       return;
     }
     if (state.flipped && ['1', '2', '3', '4'].indexOf(event.key) >= 0) {
@@ -528,6 +743,14 @@ function bind() {
     var target = event.target;
     var known = target.getAttribute ? target.getAttribute('data-known') : null;
     if (known) markKnown(known);
+  });
+  el('wbInboxList').addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var approve = target.getAttribute('data-approve');
+    var reject = target.getAttribute('data-reject');
+    if (approve) approveCandidate(approve);
+    else if (reject) rejectCandidate(reject);
   });
 }
 

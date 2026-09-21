@@ -54,8 +54,9 @@
       <div class="wb-tabs" role="tablist" id="wbTabs">
         <button class="btn btn-secondary wb-tab is-active" data-view="review" type="button" data-i18n="wb.tab.review">Review</button>
         <button class="btn btn-secondary wb-tab" data-view="digest" type="button" data-i18n="wb.tab.passive">Passive</button>
-        <button class="btn btn-secondary wb-tab" data-view="browse" type="button" data-i18n="wb.tab.browse">Browse</button>
         <button class="btn btn-secondary wb-tab" data-view="river" type="button" data-i18n="wb.tab.river">River</button>
+        <button class="btn btn-secondary wb-tab" data-view="inbox" type="button" data-i18n="wb.tab.inbox">Inbox</button>
+        <button class="btn btn-secondary wb-tab" data-view="browse" type="button" data-i18n="wb.tab.browse">Browse</button>
       </div>
 
       <div class="panel wb-view" id="wbReview">
@@ -63,6 +64,8 @@
           <span class="pill pill-accent" id="wbCounter">0 / 0</span>
           <span class="pill" id="wbModeLabel">-</span>
           <span class="muted small" data-i18n="wb.hint">Space flips, 1-4 grades</span>
+          <button class="btn btn-ghost btn-small" id="wbLookOnly" type="button" aria-pressed="false" data-i18n="wb.lookOnly">Look only</button>
+          <span class="muted small hidden" id="wbLookNote"></span>
         </div>
         <div class="wb-progress"><div class="wb-progress-fill" id="wbProgress"></div></div>
         <div class="wb-card" id="wbCard">
@@ -81,6 +84,7 @@
           <button class="btn btn-secondary" data-rating="2" type="button"><span data-i18n="wb.grade.hard">Hard</span> <span class="wb-when" data-when="2"></span></button>
           <button class="btn btn-primary" data-rating="3" type="button"><span data-i18n="wb.grade.good">Good</span> <span class="wb-when" data-when="3"></span></button>
           <button class="btn btn-success" data-rating="4" type="button"><span data-i18n="wb.grade.easy">Easy</span> <span class="wb-when" data-when="4"></span></button>
+          <button class="btn btn-primary hidden" id="wbNext" type="button" data-i18n="wb.next">Next</button>
           <button class="btn btn-ghost" id="wbFlip" type="button" data-i18n="wb.flip">Flip</button>
         </div>
         <div class="wb-done hidden" id="wbDone">
@@ -96,6 +100,30 @@
           <button class="btn btn-ghost btn-small" id="wbDigestRefresh" type="button" data-i18n="wb.passive.rebuild">Rebuild</button>
         </div>
         <div class="wb-digest-list" id="wbDigestList"></div>
+      </div>
+
+      <div class="panel wb-view hidden" id="wbInbox">
+        <div class="wb-review-top">
+          <span class="pill pill-accent" id="wbInboxCount">0</span>
+          <span class="muted small" data-i18n="wb.inbox.note">Candidates mined from your text.</span>
+          <button class="btn btn-ghost btn-small" id="wbInboxRefresh" type="button" data-i18n="wb.inbox.refresh">Refresh</button>
+        </div>
+        <p class="muted small hidden" id="wbInboxNote"></p>
+        <div class="wb-inbox-list" id="wbInboxList"></div>
+        <details class="wb-sub">
+          <summary data-i18n="wb.mine.title">Mine a word</summary>
+          <p class="muted small" data-i18n="wb.mine.note">Everything here is Japanese. The sentence becomes the card context.</p>
+          <div class="wb-form">
+            <label class="wb-field"><span data-i18n="wb.mine.word">Word or phrase</span><input id="wbMineWord" type="text" lang="ja" autocomplete="off"></label>
+            <label class="wb-field"><span data-i18n="wb.mine.reading">Reading</span><input id="wbMineReading" type="text" lang="ja" autocomplete="off"></label>
+            <label class="wb-field wb-field-wide"><span data-i18n="wb.mine.definition">Definition</span><textarea id="wbMineDefinition" rows="2" lang="ja"></textarea></label>
+            <label class="wb-field wb-field-wide"><span data-i18n="wb.mine.sentence">Source sentence</span><textarea id="wbMineSentence" rows="2" lang="ja"></textarea></label>
+          </div>
+          <div class="row-actions">
+            <button class="btn btn-primary btn-small" id="wbMineAdd" type="button" data-i18n="wb.mine.add">Add to the wordbook</button>
+          </div>
+          <p class="muted small hidden" id="wbMineResult"></p>
+        </details>
       </div>
 
       <div class="panel wb-view hidden" id="wbBrowse">
@@ -129,10 +157,42 @@
 
       <details class="wb-manage">
         <summary data-i18n="wb.manage">Manage data</summary>
+
+        <div class="wb-manage-block">
+          <p class="muted small" data-i18n="wb.import.note">Paste a passage. Words not already in the wordbook become candidates; nothing is carded until you approve it.</p>
+          <textarea class="wb-textarea" id="wbImportText" rows="4" lang="ja" data-i18n-placeholder="wb.import.placeholder" placeholder="Paste Japanese text here"></textarea>
+          <div class="row-actions">
+            <button class="btn btn-ghost btn-small" id="wbImportRun" type="button" data-i18n="wb.import.run">Find candidates</button>
+            <label class="btn btn-ghost btn-small wb-file">
+              <span data-i18n="wb.import.file">Choose a file</span>
+              <input type="file" id="wbImportFile" accept=".txt,.md,text/plain" hidden>
+            </label>
+          </div>
+          <p class="muted small hidden" id="wbImportResult"></p>
+        </div>
+
+        <div class="wb-manage-block">
+          <p class="muted small" data-i18n="wb.freq.note">A frequency list orders candidates toward the useful middle band. One word and one rank per line, either order.</p>
+          <textarea class="wb-textarea" id="wbFreqText" rows="3" data-i18n-placeholder="wb.freq.placeholder" placeholder="20000 語彙"></textarea>
+          <div class="row-actions">
+            <button class="btn btn-ghost btn-small" id="wbFreqRun" type="button" data-i18n="wb.freq.run">Import the list</button>
+            <label class="btn btn-ghost btn-small wb-file">
+              <span data-i18n="wb.freq.file">Choose a file</span>
+              <input type="file" id="wbFreqFile" accept=".txt,.csv,text/plain" hidden>
+            </label>
+          </div>
+          <p class="muted small hidden" id="wbFreqResult"></p>
+        </div>
+
         <div class="row-actions">
           <button class="btn btn-ghost btn-small" id="wbExport" type="button" data-i18n="wb.export">Export JSON</button>
+          <label class="btn btn-ghost btn-small wb-file">
+            <span data-i18n="wb.restore">Restore a backup</span>
+            <input type="file" id="wbRestoreFile" accept=".json,application/json" hidden>
+          </label>
           <button class="btn btn-ghost btn-small" id="wbReset" type="button" data-i18n="wb.reset">Reset all</button>
         </div>
+        <p class="muted small hidden" id="wbRestoreResult"></p>
         <p class="muted small mb-0" data-i18n="wb.manage.note">Everything stays in this browser in IndexedDB.</p>
       </details>
     </div>

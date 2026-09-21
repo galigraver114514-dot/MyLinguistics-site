@@ -6,7 +6,9 @@
  */
 
 export const DB_NAME = 'ml-lexicon';
-export const DB_VERSION = 1;
+/* 2 added the frequency store. The upgrade is additive, so a database created
+ * by version 1 keeps every word, card shows, and exposure. */
+export const DB_VERSION = 2;
 
 export const STORES = Object.freeze({
   words: 'words',
@@ -14,6 +16,7 @@ export const STORES = Object.freeze({
   cards: 'cards',
   encounters: 'encounters',
   exposures: 'exposures',
+  frequency: 'frequency',
   meta: 'meta'
 });
 
@@ -45,6 +48,9 @@ export function openDb(factory) {
         var exposures = db.createObjectStore(STORES.exposures, { keyPath: 'id', autoIncrement: true });
         exposures.createIndex('senseId', 'senseId', { unique: false });
         exposures.createIndex('ts', 'ts', { unique: false });
+      }
+      if (!names.contains(STORES.frequency)) {
+        db.createObjectStore(STORES.frequency, { keyPath: 'lemma' });
       }
       if (!names.contains(STORES.meta)) {
         db.createObjectStore(STORES.meta, { keyPath: 'key' });

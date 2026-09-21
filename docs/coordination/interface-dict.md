@@ -1,6 +1,6 @@
 # Frozen interface: shared dictionary module
 
-**Version 1.2. Owner: agent-reader.** Changing this file requires a version bump
+**Version 1.3. Owner: agent-reader.** Changing this file requires a version bump
 and an `ANSWER:` entry in `log-wordbook.md` agreeing to it.
 
 Changes in 1.1: Entry gained `headwords` and `readings`, and `raw` is now
@@ -14,6 +14,13 @@ Changes in 1.2: SourceInfo gained `languages`, `keyCount`, `bankCount` and
 often ships no meta bank at all, which means no frequency and no pitch accent,
 and a caller that wants to show a badge needs to be able to tell that apart from
 a dictionary that simply has not loaded yet.
+
+Changes in 1.3: `structured.js` is implemented and documented in full below,
+and the Dictionary facade gained three ways to reach inside an imported
+dictionary's zip - `asset`, `assetUrl`, `dictionaryStyles`. Additive once
+more: nothing existing changed shape, and 1.2 listed some fields in
+`sources()` that the implementation was still returning as a subset, which is
+now fixed rather than extended.
 
 Both the reader and the vocabulary system need the same four things: import a
 Yomitan dictionary, resolve an inflected surface to a dictionary form, look a
@@ -51,8 +58,14 @@ and `jsdom`.
       candidates(surface, token) -> string[]       pure, no IO
       kanji(ch)              -> Promise<KanjiInfo | null>
       sources()              -> SourceInfo[]
+      problems()             -> Array<{ id, stage, error }>
       importYomitan(file, onProgress) -> Promise<ImportResult>
+      stored()               -> Promise<SourceInfo[]>  imported, not loaded
+      restore(id)            -> Promise<Source|null>
       removeSource(id)       -> Promise<void>
+      asset(sourceId, path)  -> Promise<{ data: Uint8Array, mediaType } | null>
+      assetUrl(sourceId, path) -> Promise<string | null>  blob URL; caller revokes
+      dictionaryStyles(id)   -> Promise<string | null>    the zip's styles.css
       usage()                -> Promise<{ bytes, quota }>
       close()                -> void
     }
@@ -100,16 +113,42 @@ Yomitan's tag tree into DOM nodes:
     node = { tag, style?, data?, content?, href? }
 
 Required tags: `span div p ol ul li table thead tbody tr th td ruby rb rt br
-img a`. Required behaviour:
+img a`. Required behaviour, all implemented:
 
-- `data.name` is semantic (見出部, 見出仮名, 標準表記, ...). Keep it as a
-  `data-` attribute so per-dictionary CSS can target it; do not discard it.
-- `a` elements are cross-references. Render them as focsable elements and
-  emit a click event carrying `href` so the caller can push them onto its own
-  history stack. **A monolingual dictionary is unusable if these are dead.**
-- `img` sources resolve relative to the dictionary zip; the module returns
-  object URLs or blob URLs, not broken paths.
-- Per-dictionary `styles.css` from the zip is scoped and injected once.
+- `data.name` is semantic (見出部, 見出仮名, 標準表記, ...). It is kept as a
+  `data-` attribute so per-dictionary CSS can target it; never discarded.
+- `a` elements are cross-references. They render as focusable elements with
+  `data-href`, `role="link"` and `tabindex="0"`. A click, or Enter or
+  Space while focused, calls `onReference(href, event, text)` and fires a
+  bubbling `dictionary-reference` CustomEvent whose `detail` is
+  `{ href, text }`. There is deliberately no real `href`, so the browser
+  never navigates and the caller keeps ownership of its history stack. **A
+  monolingual dictionary is unusable if these are dead.**
+- `img` elements carry `data-path`, relative to the zip, and are resolved
+  in a second pass by `hydrateImages(root, resolveImage)`, or immediately by a
+  synchronous `options.resolveImage`. A broken `src` is never emitted.
+- `script`, `iframe` and the rest of a fixed unsafe list are dropped as
+  elements while their text is kept, so a glossary never renders as markup.
+- Per-dictionary `styles.css` from the zip is scoped and injected once by
+  `ensureStyles(document, sourceId, css)`. Scoping is a conservative selector
+  rewrite: conditional at-rules are descended into, and `font-face` and
+  `keyframes` are left byte-for-byte alone.
+
+    structured.js exports
+      renderGloss(gloss, options)   -> DocumentFragment  string or tree, no branching
+      renderNode(node, options)     -> Node | null
+      plainText(gloss)              -> string            flattens a tree, ruby included
+      hydrateImages(root, resolve)  -> Promise<number>   how many images resolved
+      scopeStyles(css, scope)       -> string
+      dictionaryScope(id)           -> string
+      ensureStyles(doc, id, css)    -> HTMLStyleElement | null
+
+    options = { document, onReference, resolveImage, referenceClass }
+
+`plainText` matters outside the reader: a wordbook that only accepts strings
+would otherwise have to skip every monolingual sense, which is most of them.
+Images and stylesheets are read from the zip through the facade above, so the
+renderer itself needs no zip access.
 
 ## Performance budget, measured on the target device
 

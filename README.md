@@ -11,7 +11,12 @@ The interface switches between English, Chinese, and Japanese.
 - **Reader** - opens your own EPUBs, with vertical and horizontal typesetting,
   authored ruby, and reading position stored as a text offset.
 - **Wordbook** - one card per sense, monolingual Japanese definitions, FSRS-6
-  review with recognition before production, and a passive exposure track.
+  review with recognition before production, a passive exposure track, and a
+  random word river.
+- **Mining and triage** - paste a passage (or import a text file) and recurring
+  unknown words are proposed as candidates. Approving one authors its cards;
+  ignoring one retires it. A frequency list reorders candidates toward the
+  useful middle band and sharpens word segmentation.
 - **No English on Japanese words.** Readings are kana, parts of speech are
   Japanese, and a definition never falls back to another language.
 - **Interface languages** - English, Chinese, Japanese.
@@ -32,7 +37,7 @@ The interface switches between English, Chinese, and Japanese.
     |   |-- js/i18n.js        Interface strings (en / zh / ja)
     |   |-- js/app.js         Interface language, theme, chrome
     |   +-- favicon.svg
-    |-- src/lexicon/          Wordbook engine (schema, FSRS-6, passive digest, IndexedDB)
+    |-- src/lexicon/          Wordbook engine (schema, FSRS-6, digest, river, tokeniser, IndexedDB)
     |-- src/dict/             Shared dictionary module (agent-reader)
     |-- reader/               EPUB reader (agent-reader)
     |-- tests/                Node test suite
@@ -47,11 +52,16 @@ The interface switches between English, Chinese, and Japanese.
 `study.html` is the whole study surface.
 
 - **Review** schedules each sense with FSRS-6, recognition before production.
+  A **Look only** toggle shows every answer and advances without grading.
 - **Passive** is a context-rich digest you only read. It grows a decaying
   familiarity score and never writes into the FSRS schedule.
-- **Browse** lists the lexicon with recognition and card state.
 - **River** is a random, context-free stream of words. No grading and no
   sentences; it only nudges recognition, one exposure at a time.
+- **Inbox** holds mined candidates. Approve one to author its cards, or ignore
+  it to retire it. The same panel captures a word by hand.
+- **Browse** lists the lexicon with recognition and card state.
+- **Manage data** mines pasted text or a file, imports a frequency list (a word
+  and a rank per line, either order), and exports or restores a JSON backup.
 - Definitions come from the shared dictionary module (`src/dict`, specified by
   `docs/coordination/interface-dict.md`) once it lands; until then they come
   from the built-in seed in `src/lexicon/seed-ja.js`. English never appears.
@@ -110,7 +120,7 @@ Then remove the previous key from the deployment repository under
 
 | Key | Action |
 | --- | --- |
-| Space | Flip the current card |
+| Space | Flip the current card, or advance in look-only mode |
 | 1 | Grade *Again* |
 | 2 | Grade *Hard* |
 | 3 | Grade *Good* |
