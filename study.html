@@ -184,6 +184,18 @@
           <p class="muted small hidden" id="wbFreqResult"></p>
         </div>
 
+        <div class="wb-manage-block">
+          <p class="muted small" data-i18n="wb.dict.note">Import a Yomitan dictionary (a zip) for monolingual definitions, sharper mining, and a much larger word river.</p>
+          <div class="row-actions">
+            <label class="btn btn-ghost btn-small wb-file">
+              <span data-i18n="wb.dict.choose">Choose a dictionary</span>
+              <input type="file" id="wbDictFile" accept=".zip,application/zip" hidden>
+            </label>
+            <button class="btn btn-ghost btn-small" id="wbDictForget" type="button" data-i18n="wb.dict.forget">Remove imported dictionaries</button>
+          </div>
+          <p class="muted small hidden" id="wbDictResult"></p>
+        </div>
+
         <div class="row-actions">
           <button class="btn btn-ghost btn-small" id="wbExport" type="button" data-i18n="wb.export">Export JSON</button>
           <label class="btn btn-ghost btn-small wb-file">

@@ -12,6 +12,7 @@ import { Lexicon, SETTINGS } from './store.js';
 import { SEED_DEFS } from './seed-ja.js';
 import { schedule } from './srs.js';
 import { isOutputMode } from './schema.js';
+import { collectRiverPool } from './river-pool.js';
 
 var state = {
   lex: null,
@@ -27,7 +28,9 @@ var state = {
   digestSeen: {},
   inbox: [],
   browseFilter: '',
-  lookOnly: false
+  lookOnly: false,
+  dictionary: null,
+  dictCount: 0
 };
 
 /* English fallbacks keep the engine usable when loaded without the site runtime
@@ -81,7 +84,13 @@ var FALLBACK = {
   'wb.mode.fill': 'Fill in',
   'wb.mode.sentence': 'Sentence',
   'wb.match.exact': 'Exact match.',
-  'wb.match.diff': 'You wrote {a}; the word is {b}.'
+  'wb.match.diff': 'You wrote {a}; the word is {b}.',
+  'wb.dictLoaded': '{n} words from your imported dictionaries.',
+  'wb.dict.importing': 'Importing...',
+  'wb.dict.imported': '{n} entries imported.',
+  'wb.dict.failed': 'That dictionary could not be imported.',
+  'wb.dict.removed': 'Imported dictionaries removed.',
+  'wb.dict.unavailable': 'The dictionary module is not available.'
 };
 
 function formatDue(ms) {
@@ -140,6 +149,96 @@ function modeLabel(mode) {
     return isOutputMode(mode) ? tText('wb.mode.output') : tText('wb.mode.recognition');
   }
   return text;
+}
+
+/* -------------------------------------------------------------- dictionary
+ * The dictionary is optional here. Every path degrades to the seed: no module,
+ * no imported source, or no storage must not stop the wordbook from working.
+ */
+
+function dictLexicon() {
+  var dict = state.dictionary;
+  if (!dict || typeof dict.lexicon !== 'function') return null;
+  try {
+    var lexicon = dict.lexicon();
+    if (lexicon && typeof lexicon.has === 'function' && typeof lexicon.count === 'function' && lexicon.count() > 0) {
+      return lexicon;
+    }
+  } catch (err) { /* fall through to no lexicon */ }
+  return null;
+}
+
+async function refreshDictionary() {
+  var dict = state.dictionary;
+  var count = 0;
+  if (dict && typeof dict.lexicon === 'function') {
+    try { count = dict.lexicon().count() || 0; } catch (err) { count = 0; }
+  }
+  state.dictCount = count;
+  var notice = el('wbDictNotice');
+  if (notice) {
+    notice.textContent = count > 0 ? tText('wb.dictLoaded', { n: count }) : tText('wb.dictMissing');
+    show(notice, true);
+  }
+}
+
+/* An imported dictionary persists, so a normal boot restores it without the
+ * file. A failure here is reported by the module and must not block the page. */
+async function restoreDictionaries() {
+  var dict = state.dictionary;
+  if (!dict || typeof dict.stored !== 'function' || typeof dict.restore !== 'function') return;
+  try {
+    var stored = await dict.stored();
+    for (var i = 0; i < (stored || []).length; i += 1) {
+      try { await dict.restore(stored[i].id); } catch (err) { /* ignore one bad source */ }
+    }
+  } catch (err) { /* no storage is a normal state */ }
+}
+
+async function importDictionary(file) {
+  var node = el('wbDictResult');
+  var dict = state.dictionary;
+  if (!dict || typeof dict.importYomitan !== 'function') {
+    node.textContent = tText('wb.dict.unavailable');
+    show(node, true);
+    return;
+  }
+  node.textContent = tText('wb.dict.importing');
+  show(node, true);
+  try {
+    var result = await dict.importYomitan(file, function (event) {
+      if (event && event.stage === 'bank' && event.loaded && event.total) {
+        node.textContent = tText('wb.dict.progress', { loaded: event.loaded, total: event.total });
+      }
+    });
+    node.textContent = tText('wb.dict.imported', { n: (result && result.entries) || 0 });
+    show(node, true);
+  } catch (err) {
+    node.textContent = tText('wb.dict.failed');
+    show(node, true);
+    return;
+  }
+  await refreshDictionary();
+  if (state.lex) {
+    await state.lex.enrichFromDictionary(state.dictionary);
+    await refresh();
+  }
+}
+
+async function forgetDictionaries() {
+  var dict = state.dictionary;
+  if (!dict || typeof dict.removeSource !== 'function' || typeof dict.sources !== 'function') return;
+  var loaded = dict.sources() || [];
+  for (var i = 0; i < loaded.length; i += 1) {
+    if (loaded[i].kind !== 'yomitan') continue;
+    try { await dict.removeSource(loaded[i].id); } catch (err) { /* ignore */ }
+  }
+  var node = el('wbDictResult');
+  if (node) {
+    node.textContent = tText('wb.dict.removed');
+    show(node, true);
+  }
+  await refreshDictionary();
 }
 
 /* ------------------------------------------------------------------ stats */
@@ -455,7 +554,7 @@ function readTextFile(file, done) {
 async function runImport() {
   var text = el('wbImportText').value;
   if (!text || !text.trim()) return;
-  var result = await state.lex.importText(text, { source: { kind: 'paste' } });
+  var result = await state.lex.importText(text, { source: { kind: 'paste' }, lexicon: dictLexicon() });
   var node = el('wbImportResult');
   node.textContent = tText('wb.import.result', { n: result.candidates, s: result.sentences });
   show(node, true);
@@ -549,31 +648,30 @@ async function resetAll() {
  * model learns from it like any other passive channel.
  */
 
-var RIVER = { window: 5, itemHeight: 92, dwell: 2800, timer: null, feed: null, paused: false, items: [] };
+var RIVER = { window: 5, itemHeight: 92, dwell: 2800, timer: null, feed: null, paused: false, items: [], token: null, sample: 60 };
 
-function riverPool() {
-  var pool = [];
-  Object.keys(state.senseById).forEach(function (id) {
-    var sense = state.senseById[id];
-    var word = state.wordById[sense.wordId];
-    if (word) pool.push({ sense: sense, word: word });
+async function riverPool() {
+  var senses = Object.keys(state.senseById).map(function (id) { return state.senseById[id]; });
+  return collectRiverPool({
+    senses: senses,
+    wordById: state.wordById,
+    dictionary: state.dictionary,
+    limit: RIVER.sample
   });
-  return pool;
 }
 
 function riverItemHtml(item, current) {
-  var definition = (item.sense.definition && item.sense.definition.text) || '';
   return '<div class="wb-river-item' + (current ? ' is-current' : '') + '">' +
-    '<p class="wb-river-term">' + esc(item.word.lemma) + '</p>' +
-    '<p class="wb-river-reading">' + esc(item.word.reading || '') + '</p>' +
-    '<p class="wb-river-definition">' + esc(definition) + '</p>' +
+    '<p class="wb-river-term">' + esc(item.term) + '</p>' +
+    '<p class="wb-river-reading">' + esc(item.reading || '') + '</p>' +
+    '<p class="wb-river-definition">' + esc(item.definition || '') + '</p>' +
     '</div>';
 }
 
 function exposeRiver(index) {
   var item = RIVER.items[index];
-  if (!item || !state.lex) return;
-  var result = state.lex.recordExposure(item.sense.id, 'river', Date.now());
+  if (!item || !item.senseId || !state.lex) return;
+  var result = state.lex.recordExposure(item.senseId, 'river', Date.now());
   if (result && result.catch) result.catch(function () { /* best effort */ });
 }
 
@@ -589,11 +687,14 @@ function highlightRiverCenter() {
   exposeRiver(center);
 }
 
-function startRiver() {
+async function startRiver() {
   stopRiver();
+  var token = {};
+  RIVER.token = token;
   var track = el('wbRiverTrack');
   if (!track) return;
-  var pool = riverPool();
+  var pool = await riverPool();
+  if (RIVER.token !== token) return;
   if (!pool.length) {
     track.style.transform = 'translateY(0)';
     track.innerHTML = '<p class="muted" style="padding:24px;">' + esc(tText('wb.river.empty')) + '</p>';
@@ -641,6 +742,7 @@ function riverStep() {
 }
 
 function stopRiver() {
+  RIVER.token = null;
   if (RIVER.timer) {
     window.clearInterval(RIVER.timer);
     RIVER.timer = null;
@@ -709,6 +811,11 @@ function bind() {
     var file = event.target.files && event.target.files[0];
     if (file) runRestore(file);
   });
+  el('wbDictFile').addEventListener('change', function (event) {
+    var file = event.target.files && event.target.files[0];
+    if (file) importDictionary(file);
+  });
+  el('wbDictForget').addEventListener('click', forgetDictionaries);
   var gradeButtons = document.querySelectorAll('#wbGrades [data-rating]');
   for (var g = 0; g < gradeButtons.length; g += 1) {
     gradeButtons[g].addEventListener('click', function (event) {
@@ -757,18 +864,17 @@ function bind() {
 async function init() {
   try {
     /* Load the shared dictionary module with no bundled packs: there is no
-     * pack host in this repository, and definitions still come from the seed
-     * until a Yomitan dictionary is imported in a later phase. This keeps the
-     * seam warm without any network access. */
+     * pack host in this repository. A Yomitan dictionary that the learner
+     * imported earlier is restored from IndexedDB, and definitions come from
+     * it the moment it is available. */
     state.dictionary = await loadDictionary({ packs: [] });
-    var dictNotice = el('wbDictNotice');
-    if (dictNotice) {
-      dictNotice.textContent = tText('wb.dictMissing');
-      show(dictNotice, true);
-    }
+    await restoreDictionaries();
+    await refreshDictionary();
+
     var db = await openDb();
     state.lex = new Lexicon(db);
     await state.lex.seedFromLegacy(window.ML_DATA ? window.ML_DATA.vocab : [], SEED_DEFS);
+    await state.lex.enrichFromDictionary(state.dictionary);
     await refresh();
     await startReview();
     bind();

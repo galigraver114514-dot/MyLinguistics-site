@@ -14,7 +14,10 @@ import {
 } from './schema.js';
 import { schedule, DEFAULT_PARAMS } from './srs.js';
 import { buildDigest, bumpFamiliarity, currentFamiliarity, KNOWN_THRESHOLD } from './digest.js';
-import { contentTokens, splitSentences } from './tokenize.js';
+/* The tokeniser is the shared one in src/dict: its lexicon is the loaded
+ * dictionary index, so segmentation stops being a heuristic the moment a
+ * dictionary (or a frequency list) is present. */
+import { contentTokens, splitSentences } from '../dict/tokenize.js';
 import { selectCandidates } from './select.js';
 import { parseFrequencyList } from './frequency.js';
 import { modesForSense, definitionFromEntry } from './authoring.js';
@@ -331,9 +334,13 @@ export class Lexicon {
     var encounters = await this.listEncounters();
     var frequency = await this.frequencyMap();
     var ignore = await this.ignoreList();
-    var lexicon = new Set();
-    words.forEach(function (word) { lexicon.add(normalizeKey(word.lemma)); });
-    frequency.forEach(function (rank, lemma) { lexicon.add(lemma); });
+    var localLexicon = new Set();
+    words.forEach(function (word) { localLexicon.add(normalizeKey(word.lemma)); });
+    frequency.forEach(function (rank, lemma) { localLexicon.add(lemma); });
+    var externalLexicon = opts.lexicon && typeof opts.lexicon.has === 'function' ? opts.lexicon : null;
+    var lexicon = externalLexicon ? {
+      has: function (form) { return localLexicon.has(form) || externalLexicon.has(form); }
+    } : localLexicon;
 
     var known = new Set();
     words.forEach(function (word) { known.add(normalizeKey(word.lemma)); });
@@ -506,6 +513,41 @@ export class Lexicon {
       now: opts.now,
       dictionary: opts.dictionary
     });
+  }
+
+  /* Fill in senses that are still pending from a loaded dictionary. Seeded
+   * senses already carry their definition (dictId 'seed:ja'), so this only
+   * touches mined and captured words that had no definition yet. */
+  async enrichFromDictionary(dictionary, now) {
+    if (!dictionary || typeof dictionary.lookup !== 'function') return { updated: 0 };
+    var time = now || Date.now();
+    var words = await this.listWords();
+    var wordById = {};
+    words.forEach(function (word) { wordById[word.id] = word; });
+    var senses = await this.listSenses();
+    var updated = [];
+    for (var i = 0; i < senses.length; i += 1) {
+      var sense = senses[i];
+      var definition = sense.definition || {};
+      if (!definition.pending) continue;
+      if (definition.text && definition.text.length) continue;
+      var word = wordById[sense.wordId];
+      if (!word) continue;
+      var found = null;
+      try {
+        var entries = await dictionary.lookup(word.lemma);
+        for (var e = 0; e < (entries || []).length && !found; e += 1) {
+          found = definitionFromEntry(entries[e]);
+        }
+      } catch (err) {
+        found = null;
+      }
+      if (!found) continue;
+      sense.definition = found;
+      updated.push(sense);
+    }
+    if (updated.length) await idb.putAll(this.db, STORES.senses, updated);
+    return { updated: updated.length, at: time };
   }
 
   /* Restore a backup produced by exportAll. Additive: it overwrites by id and

@@ -19,8 +19,8 @@ A first vertical slice is implemented and tested:
 | Passive exposure and digest | `src/lexicon/digest.js`, `Lexicon.digest` |
 | IndexedDB storage | `src/lexicon/db.js` |
 | Capture telemetry and operations | `src/lexicon/store.js` |
-| Word river (context-free stream) | `src/lexicon/river.js` |
-| Text segmentation | `src/lexicon/tokenize.js` |
+| Word river (context-free stream) | `src/lexicon/river.js`, `src/lexicon/river-pool.js` |
+| Text segmentation | `src/dict/tokenize.js` (shared with the reader) |
 | Candidate funnel and frequency band | `src/lexicon/select.js` |
 | Frequency-list import | `src/lexicon/frequency.js`, `Lexicon.importFrequency` |
 | Automatic enrolment and inbox | `Lexicon.importText`, `Lexicon.listInbox` |
@@ -31,13 +31,15 @@ A first vertical slice is implemented and tested:
 Automatic enrolment, triage, manual capture, frequency import, backup
 restore, and look-only review are implemented and tested end to end.
 
-Still to build: a dictionary-backed morphological analyser (the current
-segmenter is script runs plus maximal matching; the real one is agreed to live
-at `src/dict/tokenize.js` and be shared with the reader), Yomitan dictionary
-import into the wordbook (the module supports it; its structured-content
-renderer is the last file), the self-built mid-band frequency list, the
-reader-side guide mode, and the nuance, collocation and synonym data that
-sections 7 and 18 mark as needing an external source.
+The wordbook also imports a Yomitan dictionary itself, in **Manage data**:
+the import persists, the next boot restores it, its key index becomes the
+segmentation lexicon, pending senses are filled from it, and the word river
+draws its pool from it through `lexicon().sample(n)`.
+
+Still to build: the self-built mid-band frequency list, definition enrichment
+of the seeded words (they keep their built-in JP-JP glosses), the reader-side
+guide mode, and the nuance, collocation and synonym data that sections 7 and 18
+mark as needing an external source.
 
 ## 0. Summary
 
@@ -208,12 +210,11 @@ Triage is then optional: unapproved entries still feed the passive digest. Caps
 apply per import and per day, the candidate count is shown, and bulk rejection
 is one action. This is what makes "I did not have to hunt for words" true.
 
-Implemented in `Lexicon.importText` with `src/lexicon/tokenize.js` and
-`src/lexicon/select.js`. The segmenter is script runs upgraded to maximal
-matching as soon as a frequency list or a dictionary's key index supplies a
-lexicon; the real morphological analyser, which adds a reading and a basic form
-per token, is agreed to live at `src/dict/tokenize.js` and serve both apps.
-Nothing is scheduled by approving a candidate until the learner approves it.
+Implemented in `Lexicon.importText` with the shared tokeniser
+(`src/dict/tokenize.js`) and `src/lexicon/select.js`. Segmentation is script
+runs upgraded to maximal matching as soon as a frequency list or the loaded
+dictionary's key index supplies a lexicon, and the tokeniser is shared with the
+reader. Nothing is scheduled until the learner approves a candidate.
 
 ### 5.5 Exposure, kept out of FSRS
 
@@ -563,10 +564,11 @@ The whole funnel is live.
 
 - `Lexicon.recordEncounter` counts **distinct** sentences and promotes a word
   to `inbox` at three.
-- `Lexicon.importText` tokenises a passage, drops known, carded, dismissed and
-  ignored words, keeps words that recur at least twice (configurable), applies
-  the frequency-band weight, and writes the survivors to the inbox with their
-  source sentences.
+- `Lexicon.importText` tokenises a passage with the shared tokeniser, against
+  the loaded dictionary's index when there is one, drops known, carded,
+  dismissed and ignored words, keeps words that recur at least twice
+  (configurable), applies the frequency-band weight, and writes the survivors
+  to the inbox with their source sentences.
 - `Lexicon.importFrequency` reads a word/rank list, stores it, and stamps the
   rank onto matching words. The same list is the lexicon for maximal matching,
   so segmentation sharpens the moment one is imported.

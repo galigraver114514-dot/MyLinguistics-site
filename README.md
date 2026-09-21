@@ -20,6 +20,9 @@ The interface switches between English, Chinese, and Japanese.
 - **No English on Japanese words.** Readings are kana, parts of speech are
   Japanese, and a definition never falls back to another language.
 - **Interface languages** - English, Chinese, Japanese.
+- **Your own dictionary** - import a Yomitan JP-JP dictionary (a zip). It
+  persists in the browser, backs the definitions, sharpens word segmentation,
+  and feeds the word river's pool.
 - **Data ownership** - IndexedDB holds the lexicon and the reader's books;
   localStorage holds only the interface language and the theme.
 
@@ -61,10 +64,12 @@ The interface switches between English, Chinese, and Japanese.
   it to retire it. The same panel captures a word by hand.
 - **Browse** lists the lexicon with recognition and card state.
 - **Manage data** mines pasted text or a file, imports a frequency list (a word
-  and a rank per line, either order), and exports or restores a JSON backup.
-- Definitions come from the shared dictionary module (`src/dict`, specified by
-  `docs/coordination/interface-dict.md`) once it lands; until then they come
-  from the built-in seed in `src/lexicon/seed-ja.js`. English never appears.
+  and a rank per line, either order), imports a Yomitan dictionary, and exports
+  or restores a JSON backup.
+- Definitions come from the shared dictionary module (`src/dict`): import a
+  Yomitan JP-JP dictionary and mined or captured words take their definition
+  from it. The seeded words keep the built-in monolingual glosses in
+  `src/lexicon/seed-ja.js`. English never appears.
 
 Run the tests with Node 20 or newer:
 
