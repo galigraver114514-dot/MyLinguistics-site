@@ -30,26 +30,27 @@
 </head>
 <body class="has-shell">
 <a class="skip-link" href="#main" data-i18n="a11y.skip">Skip to content</a>
-<header class="navbar" id="navbar">
-  <div class="navbar-inner header-inner">
-    <a class="navbar-brand" href="index.html" aria-label="MyLinguistics">
+<nav class="capsule" id="tabbar" aria-label="Main navigation">
+  <div class="capsule-inner header-inner">
+    <a class="capsule-brand" href="index.html" aria-label="MyLinguistics">
       <span class="brand-mark" aria-hidden="true">ML</span>
     </a>
-    <span class="navbar-compact-title">MyLinguistics</span>
-    <div class="navbar-actions">
-      <button class="icon-btn" id="themeToggle" type="button">Dark</button>
-      <button class="icon-btn icon-btn-glyph" id="shellMore" type="button" aria-haspopup="dialog" aria-label="More" data-i18n-aria="shell.more">⋯</button>
-    </div>
+    <a class="tabbar-item" href="index.html" data-tab="home"><span class="tabbar-label" data-i18n="nav.home">Home</span></a>
+    <a class="tabbar-item" href="reader/index.html" data-tab="reader"><span class="tabbar-label" data-i18n="nav.reading">Reading</span></a>
+    <a class="tabbar-item" href="study.html#wall" data-tab="vocab"><span class="tabbar-label" data-i18n="nav.vocab">Vocabulary</span></a>
+    <span class="capsule-rule" aria-hidden="true"></span>
+    <span class="capsule-lang" id="siteUiLangWrap"></span>
+    <button class="icon-btn icon-btn-glyph" id="shellMore" type="button" aria-haspopup="dialog" aria-label="More" data-i18n-aria="shell.more">⋯</button>
   </div>
-</header>
-<div class="navbar-large">
-  <h1 class="large-title" data-i18n="about.title">About</h1>
-  <p class="large-subtitle" data-i18n="about.lede">A small, static workspace for reading Japanese and holding on to the vocabulary.</p>
-</div>
+</nav>
 <main id="main">
 
   <section class="section">
     <div class="container">
+      <header class="wb-head wb-head-page">
+        <h1 class="large-title" data-i18n="about.title">About</h1>
+        <p class="large-subtitle" data-i18n="about.lede">A small, static workspace for reading Japanese and holding on to the vocabulary.</p>
+      </header>
       <div class="panel">
         <p data-i18n="about.body1">Nothing is uploaded.</p>
         <p class="mb-0" data-i18n="about.body2">Definitions come from the shared dictionary module.</p>
@@ -64,20 +65,6 @@
   </section>
 
 </main>
-<nav class="tabbar" id="tabbar" aria-label="Main navigation">
-  <a class="tabbar-item" href="reader/index.html" data-tab="reader">
-    <svg class="tabbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M13 3h4.5A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5H13z"/></svg>
-    <span class="tabbar-label" data-i18n="nav.reader">Reader</span>
-  </a>
-  <a class="tabbar-item" href="study.html" data-tab="learn">
-    <svg class="tabbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 12 4l9 4.5-9 4.5z"/><path d="M7 10.7V16c0 1.1 2.2 2 5 2s5-.9 5-2v-5.3"/></svg>
-    <span class="tabbar-label" data-i18n="nav.study">Study</span>
-  </a>
-  <a class="tabbar-item" href="overview.html" data-tab="overview">
-    <svg class="tabbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11"/><path d="M10 20V4"/><path d="M16 20v-6"/><path d="M2 20h20"/></svg>
-    <span class="tabbar-label" data-i18n="nav.overview">Overview</span>
-  </a>
-</nav>
 <script src="assets/js/i18n.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/shell.js"></script>

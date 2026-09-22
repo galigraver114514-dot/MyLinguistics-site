@@ -14,10 +14,27 @@ import { schedule } from './srs.js';
 import { isOutputMode } from './schema.js';
 import { collectRiverPool } from './river-pool.js';
 import { brickLabel as formatBrickLabel } from './brick-label.js';
+import { POOL_EVENT, push as pushPoolLog, list as readPoolLog } from './pool-log.js';
+import { record as recordLookup, list as readLookupLog } from './lookup-log.js';
+import { relativeTime } from './rel-time.js';
+import {
+  sourceTitle, languageBadge, hiddenFrom, hiddenTo, toggleHidden, visibleGroups,
+  entryHeadline, entryChips, senseBlocks, firstGloss, formatBytes
+} from './dict-view.js';
 
+/* The four 語彙 destinations and 海's three parts. One hash drives both the
+ * panel and the capsule's active pill (see ROUTES below). */
 var state = {
   lex: null,
-  view: 'brick',
+  view: 'wall',
+  scope: 'words',
+  entryKey: null,
+  poolFilter: 'waiting',
+  wordByLemma: {},
+  posByLemma: {},
+  encounterByKey: {},
+  waiting: [],
+  bricks: [],
   queue: [],
   index: 0,
   flipped: false,
@@ -47,10 +64,21 @@ var FALLBACK = {
   'wb.stat.recognition': 'Recognition',
   'wb.mode.recognition': 'Recognition',
   'wb.mode.output': 'Output',
-  'wb.passive.count': '{n} items',
-  'wb.passive.empty': 'Nothing to show yet. Words appear here as they enter the lexicon.',
   'wb.known': 'Already know it',
   'wb.empty.browse': 'No match.',
+  'wall.grab': 'Take the next brick from the sea',
+  'wall.reviewNow': 'Review this tier',
+  'wall.items': '{n} bricks',
+  'wall.tiers': '{n} tiers',
+  'wall.empty': 'The wall is empty. Take a brick from the sea.',
+  'pool.lede': '{n} words waiting for a brick.',
+  'pool.pick.note': 'Ten words to a brick.',
+  'pool.built': 'Built {name} from {n} words.',
+  'entry.empty': 'Pick a word from the list.',
+  'dict.empty': 'Look a word up to see its entries.',
+  'dict.searching': 'Looking it up...',
+  'dict.history': 'Looked up',
+  'time.now': 'just now',
   'wb.river.note': 'A random, context-free stream.',
   'wb.river.pause': 'Pause',
   'wb.river.resume': 'Resume',
@@ -66,11 +94,6 @@ var FALLBACK = {
   'wb.due.day': '{n}d',
   'wb.due.month': '{n}mo',
   'wb.due.year': '{n}y',
-  'wb.tab.inbox': 'Inbox',
-  'wb.tab.brick': 'Brick',
-  'wb.tab.pool': 'Pool',
-  'wb.tab.bricks': 'Bricks',
-  'wb.tab.data': 'Data',
   'wb.bricks.note': 'Ten words per brick.',
   'wb.bricks.empty': 'No bricks yet.',
   'wb.bricks.dissolve': 'Take apart',
@@ -229,7 +252,7 @@ async function restoreDictionaries() {
 }
 
 async function importDictionary(file) {
-  var node = el('wbDictResult');
+  var node = el('wbDataDictResult');
   var dict = state.dictionary;
   if (!dict || typeof dict.importYomitan !== 'function') {
     node.textContent = tText('wb.dict.unavailable');
@@ -266,7 +289,7 @@ async function forgetDictionaries() {
     if (loaded[i].kind !== 'yomitan') continue;
     try { await dict.removeSource(loaded[i].id); } catch (err) { /* ignore */ }
   }
-  var node = el('wbDictResult');
+  var node = el('wbDataDictResult');
   if (node) {
     node.textContent = tText('wb.dict.removed');
     show(node, true);
@@ -293,17 +316,41 @@ async function refresh() {
   var words = await state.lex.listWords();
   var senses = await state.lex.listSenses();
   var cards = await state.lex.listCards();
+  var pool = await state.lex.listPool();
   state.wordById = {};
   state.senseById = {};
   state.cardsBySense = {};
-  words.forEach(function (word) { state.wordById[word.id] = word; });
+  state.wordByLemma = {};
+  state.posByLemma = {};
+  state.encounterByKey = {};
+  words.forEach(function (word) {
+    state.wordById[word.id] = word;
+    state.wordByLemma[word.lemma] = word;
+  });
   senses.forEach(function (sense) { state.senseById[sense.id] = sense; });
   cards.forEach(function (card) {
     if (!state.cardsBySense[card.senseId]) state.cardsBySense[card.senseId] = [];
     state.cardsBySense[card.senseId].push(card);
   });
+  /* The part of speech a word shows as comes from its own tag, and falls back
+   * to the first sense's, because a mined word has no tag of its own. */
+  words.forEach(function (word) {
+    var tag = word.tag || null;
+    if (!tag) {
+      var sids = word.senseIds || [];
+      for (var i = 0; i < sids.length && !tag; i += 1) {
+        var sense = state.senseById[sids[i]];
+        if (sense && sense.pos && sense.pos.length) tag = sense.pos[0];
+      }
+    }
+    state.posByLemma[word.lemma] = tag;
+  });
+  pool.forEach(function (item) { state.encounterByKey[item.wordKey] = item; });
+  state.pool = pool;
+  state.cardCount = cards.length;
   state.stats = await state.lex.stats();
   renderStats();
+  renderSeaStats();
 }
 
 /* ----------------------------------------------------------------- review */
@@ -459,7 +506,7 @@ async function startReview() {
 }
 
 function flip() {
-  if (state.view !== 'brick' || !currentCard() || state.lookOnly) return;
+  if (state.view !== 'review' || !currentCard() || state.lookOnly) return;
   state.flipped = !state.flipped;
   renderCard();
   if (state.flipped) {
@@ -511,45 +558,12 @@ async function nextLookOnly() {
   renderCard();
 }
 
-/* ---------------------------------------------------------------- passive */
-
-async function renderDigest() {
-  state.digest = await state.lex.digest(Date.now(), SETTINGS.digestPerDay);
-  el('wbDigestCount').textContent = tText('wb.passive.count', { n: state.digest.length });
-  var list = el('wbDigestList');
-  if (!state.digest.length) {
-    list.innerHTML = '<p class="muted">' + esc(tText('wb.passive.empty')) + '</p>';
-    return;
-  }
-  list.innerHTML = state.digest.map(function (item) {
-    var sense = item.sense;
-    var word = item.word;
-    var definition = sense.definition || {};
-    var sentence = item.source && item.source.ja ? item.source.ja : '';
-    return '<article class="wb-digest-item">' +
-      '<div class="wb-digest-head"><strong>' + esc(word.lemma) + '</strong>' +
-      '<span class="card-reading">' + esc(word.reading || '') + '</span>' +
-'</div>' +
-      '<p class="wb-definition">' + esc(definition.text || '') + '</p>' +
-      (sentence ? '<p class="card-example">' + esc(sentence) + '</p>' : '') +
-      '<div class="wb-digest-actions">' +
-      '<button class="btn btn-ghost btn-small" data-known="' + esc(sense.id) + '" type="button">' + esc(tText('wb.known')) + '</button>' +
-      '</div></article>';
-  }).join('');
-
-  for (var i = 0; i < state.digest.length; i++) {
-    var id = state.digest[i].sense.id;
-    if (state.digestSeen[id]) continue;
-    state.digestSeen[id] = true;
-    await state.lex.recordExposure(id, 'digest', Date.now());
-  }
-  await refresh();
-}
-
+/* 既知 - the word leaves the ladder for good. The passive track that used to
+ * own this action is gone; the entry card and the 辞書 column call it now. */
 async function markKnown(senseIdValue) {
   await state.lex.markKnown(senseIdValue, Date.now());
   await refresh();
-  await renderDigest();
+  await renderEntry();
 }
 
 /* ------------------------------------------------------------------ inbox
@@ -558,12 +572,38 @@ async function markKnown(senseIdValue) {
  * inbox is scheduled by FSRS until then.
  */
 
-async function renderInbox() {
+/* 池 - the packing workshop. The default list is the words waiting for a
+ * brick; candidates keep their own list behind the filter, because the design
+ * gives them no screen and dropping the approval step is not this commit's
+ * call (see the open question in log-wordbook.md). */
+async function renderPool() {
+  state.pool = await state.lex.listPool();
   state.inbox = await state.lex.listInbox();
-  var count = el('wbInboxCount');
-  if (count) count.textContent = tText('wb.inbox.count', { n: state.inbox.length });
+  var waiting = state.pool.filter(function (item) { return item.state === 'carded'; });
+  state.waiting = waiting;
+
+  var lede = el('wbPoolLede');
+  if (lede) lede.textContent = tText('pool.lede', { n: waiting.length });
+  var count = el('wbPoolCount');
+  if (count) count.textContent = String(waiting.length);
   var brickCount = el('wbBrickCount');
   if (brickCount) brickCount.textContent = tText('wb.inbox.bricks', { n: state.stats ? (state.stats.bricks || 0) : 0 });
+
+  var list = el('wbPoolList');
+  if (list) {
+    list.innerHTML = waiting.length ? waiting.map(function (item) {
+      return '<article class="wb-inbox-item" data-word="' + esc(item.wordKey) + '">' +
+        '<div class="wb-inbox-head">' + monogram(item.wordKey) + '<strong>' + esc(item.wordKey) + '</strong>' +
+        '<span class="wb-chip">' + esc(tText('sea.state.waiting')) + '</span></div>' +
+      '</article>';
+    }).join('') : '<p class="muted">' + esc(tText('wb.inbox.empty')) + '</p>';
+  }
+  renderCandidates();
+  renderPoolLog();
+  applyPoolFilter();
+}
+
+async function renderCandidates() {
   var list = el('wbInboxList');
   if (!list) return;
   if (!state.inbox.length) {
@@ -584,6 +624,46 @@ async function renderInbox() {
   }).join('');
 }
 
+/* 池の流れ - what happened to the pool recently, and today's net direction. */
+function renderPoolLog() {
+  var rows = readPoolLog();
+  var since = Date.now() - 86400000;
+  var delta = 0;
+  rows.forEach(function (row) {
+    if ((row.at || 0) < since) return;
+    if (row.event === POOL_EVENT.toBrick) delta -= (row.size || 0);
+    else if (row.event === POOL_EVENT.fromRiver) delta += 1;
+  });
+  var head = el('wbPoolToday');
+  if (head) head.textContent = tText('pool.log.today') + ' +' + Math.max(0, delta) + ' / -' + Math.max(0, -delta);
+  var list = el('wbPoolLog');
+  if (!list) return;
+  list.innerHTML = rows.length ? rows.map(function (row) {
+    var title = row.event === POOL_EVENT.fromRiver ? tText('pool.log.fromRiver')
+      : row.event === POOL_EVENT.toBrick ? tText('pool.log.toBrick') : tText('pool.log.stayed');
+    return '<div class="wb-log-row"><span class="wb-log-time">' + esc(tRel(row.at)) + '</span>' +
+      '<span class="wb-log-main"><strong>' + esc(title) + '</strong>' +
+      '<span class="muted small">' + esc(row.word || row.name || '') + '</span></span></div>';
+  }).join('') : '<p class="muted small">' + esc(tText('pool.pick.empty')) + '</p>';
+}
+
+function applyPoolFilter() {
+  var buttons = document.querySelectorAll('#wbPoolFilter [data-pool-filter]');
+  for (var i = 0; i < buttons.length; i += 1) {
+    var on = buttons[i].getAttribute('data-pool-filter') === state.poolFilter;
+    buttons[i].classList.toggle('is-active', on);
+    buttons[i].setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  var pool = el('wbPoolList');
+  var inbox = el('wbInboxList');
+  if (pool) show(pool, state.poolFilter !== 'candidates');
+  if (inbox) show(inbox, state.poolFilter !== 'waiting');
+  var build = el('wbPoolBuild');
+  if (build) show(build, state.poolFilter !== 'candidates');
+  var enrol = el('wbEnrol');
+  if (enrol) show(enrol, state.poolFilter === 'candidates');
+}
+
 async function approveCandidate(wordKey) {
   var created = await state.lex.approveCandidate(wordKey, { dictionary: state.dictionary });
   var note = el('wbInboxNote');
@@ -592,12 +672,12 @@ async function approveCandidate(wordKey) {
     show(note, true);
   }
   await refresh();
-  await renderInbox();
+  await renderPool();
 }
 
 async function rejectCandidate(wordKey) {
   await state.lex.rejectCandidate(wordKey);
-  await renderInbox();
+  await renderPool();
 }
 
 /* Automatic enrolment: every inbox candidate becomes cards, then the pool is
@@ -610,7 +690,7 @@ async function enrolCandidates() {
     show(note, true);
   }
   await refresh();
-  await renderInbox();
+  await renderPool();
   await startReview();
 }
 
@@ -650,7 +730,7 @@ async function runImport() {
   var node = el('wbImportResult');
   node.textContent = tText('wb.import.result', { n: result.candidates, s: result.sentences });
   show(node, true);
-  await renderInbox();
+  await renderPool();
 }
 
 async function runFrequency() {
@@ -676,36 +756,14 @@ async function runRestore(file) {
     node.textContent = tText('wb.restore.result', { n: result.words });
     show(node, true);
     await refresh();
-    await renderInbox();
+    await renderPool();
   } catch (err) {
     node.textContent = tText('wb.restore.failed');
     show(node, true);
   }
 }
 
-/* ----------------------------------------------------------------- browse */
 
-async function renderBrowse() {
-  var filter = state.browseFilter.normalize('NFKC').toLowerCase();
-  var rows = [];
-  Object.keys(state.wordById).forEach(function (wordIdValue) {
-    var word = state.wordById[wordIdValue];
-    (word.senseIds || []).forEach(function (sid) {
-      var sense = state.senseById[sid];
-      if (!sense) return;
-      var definition = sense.definition || {};
-      var haystack = (word.lemma + ' ' + (word.reading || '') + ' ' + (definition.text || '')).toLowerCase();
-      if (filter && haystack.indexOf(filter) < 0) return;
-      rows.push('<tr><td><strong>' + esc(word.lemma) + '</strong></td>' +
-        '<td class="card-reading">' + esc(word.reading || '') + '</td>' +
-        '<td>' + esc(definition.text || '') + '</td>' +
-        '<td>' + percent(sense.recognition && sense.recognition.familiarity) + '%</td></tr>');
-    });
-  });
-  el('wbBrowseBody').innerHTML = rows.length
-    ? rows.join('')
-    : '<tr><td colspan="4" class="muted">' + esc(tText('wb.empty.browse')) + '</td></tr>';
-}
 
 /* ------------------------------------------------------------------- data */
 
@@ -735,7 +793,7 @@ async function resetAll() {
   await state.lex.seedFromLegacy(window.ML_DATA ? window.ML_DATA.vocab : [], SEED_DEFS);
   await refresh();
   await startReview();
-  await renderInbox();
+  await renderPool();
 }
 
 /* ------------------------------------------------------------------ river
@@ -860,7 +918,7 @@ async function collectRiverCatch() {
     show(note, true);
   }
   await refresh();
-  await renderInbox();
+  await renderPool();
 }
 
 function toggleRiver() {
@@ -873,90 +931,576 @@ function toggleRiver() {
   if (button) button.textContent = RIVER.paused ? tText('wb.river.resume') : tText('wb.river.pause');
 }
 
-/* ------------------------------------------------------------------- view */
+/* ------------------------------------------------------------------- 語彙 */
 
-/* Two sections, hash-routed. Learn is the doing surface (brick, river,
- * passive); Overview is the lexis (pool, bricks, lexicon, data). The bottom tab
- * bar switches sections; the sub-tabs switch views inside one. */
-var VIEWS = {
-  brick: { section: 'learn', panel: 'wbReview' },
-  river: { section: 'learn', panel: 'wbRiver' },
-  passive: { section: 'learn', panel: 'wbDigest' },
-  pool: { section: 'overview', panel: 'wbInbox' },
-  bricks: { section: 'overview', panel: 'wbBricks' },
-  lexicon: { section: 'overview', panel: 'wbBrowse' },
-  data: { section: 'overview', panel: 'wbData' }
+/* The six parts of speech the design colours, as token-safe names. */
+var POS_GROUP = {
+  '動詞': 'verb', '名詞': 'noun', '挨拶': 'greet',
+  '副詞': 'adv', '表現': 'expr', '接続詞': 'conj'
 };
 
-function setView(view) {
-  if (!VIEWS[view]) view = 'brick';
-  state.view = view;
-  Object.keys(VIEWS).forEach(function (key) {
-    show(el(VIEWS[key].panel), key === view);
+var STATE_KEY = {
+  new: 'sea.state.candidate', inbox: 'sea.state.candidate', carded: 'sea.state.waiting',
+  bricked: 'sea.state.bricked', known: 'sea.state.known', dismissed: 'sea.state.ignored'
+};
+
+function tRel(ms) {
+  var rel = relativeTime(ms, Date.now());
+  return tText(rel.key, rel.vars);
+}
+
+function posOf(wordKey) {
+  return state.posByLemma[wordKey] || null;
+}
+
+function groupOf(pos) {
+  return (pos && POS_GROUP[pos]) || 'mixed';
+}
+
+function monogram(wordKey) {
+  var pos = posOf(wordKey) || '';
+  return '<span class="wb-monogram" data-pos="' + esc(groupOf(pos)) + '" aria-hidden="true">' + esc(pos.charAt(0)) + '</span>';
+}
+
+function stateKeyOf(wordKey) {
+  var record = state.encounterByKey[wordKey];
+  return STATE_KEY[record ? record.state : 'new'] || STATE_KEY.new;
+}
+
+function dueLabel(brick) {
+  if (brick.phase === 'retired') return tText('wall.graduated');
+  if (!brick.due || brick.phase === 'sealed') return tText('wall.nextNow');
+  var days = Math.max(0, Math.round((brick.due - Date.now()) / 86400000));
+  return days <= 0 ? tText('wall.nextNow') : tText('wall.nextIn', { n: days });
+}
+
+function phaseKey(brick) {
+  var phase = brick && brick.phase ? brick.phase : 'sealed';
+  return 'wall.state.' + phase;
+}
+
+/* Changing the route through the app rather than the address bar, so a button
+ * and a pasted link land in the same place. route() is idempotent, so the
+ * hashchange that follows a real assignment does not double anything. */
+function go(hash) {
+  try { window.location.hash = hash; } catch (err) { /* a sandbox without one */ }
+  route();
+}
+
+/* 壁 - the wall. One row per brick and ten readable cells per row: a colour
+ * block nobody can read is not an information carrier. */
+async function renderWall() {
+  var bricks = await state.lex.listBricks();
+  state.bricks = bricks;
+  var order = { review: 0, learning: 1, sealed: 2, retired: 3 };
+  var sorted = bricks.slice().sort(function (a, b) {
+    var oa = order[a.phase] == null ? 9 : order[a.phase];
+    var ob = order[b.phase] == null ? 9 : order[b.phase];
+    if (oa !== ob) return oa - ob;
+    return (a.due || 0) - (b.due || 0);
   });
-  var tabs = document.querySelectorAll('.wb-tab');
-  for (var i = 0; i < tabs.length; i += 1) {
-    if (tabs[i].getAttribute('data-view') === view) tabs[i].classList.add('is-active');
-    else tabs[i].classList.remove('is-active');
+
+  var tiers = el('wbWallTiers');
+  if (tiers) tiers.textContent = tText('wall.tiers', { n: sorted.length });
+  var count = el('wbWallCount');
+  if (count) count.textContent = tText('wall.items', { n: sorted.length });
+
+  var grid = el('wbWallGrid');
+  if (grid) {
+    if (!sorted.length) {
+      grid.innerHTML = '<p class="muted">' + esc(tText('wall.empty')) + '</p>';
+    } else {
+      grid.innerHTML = sorted.map(function (brick) {
+        var keys = brick.wordKeys || [];
+        var cells = [];
+        for (var i = 0; i < Math.max(10, keys.length); i += 1) {
+          var key = keys[i];
+          if (key) {
+            cells.push('<span class="wb-wall-cell" data-word="' + esc(key) + '" data-pos="' + esc(groupOf(posOf(key))) + '">' + esc(key) + '</span>');
+          } else {
+            cells.push('<span class="wb-wall-cell wb-wall-cell-empty" aria-hidden="true"></span>');
+          }
+        }
+        return '<section class="wb-wall-row" data-brick="' + esc(brick.id) + '" data-phase="' + esc(brick.phase) + '">' +
+          '<header class="wb-wall-head">' +
+            '<span class="wb-wall-tab" data-pos="' + esc(groupOf(brick.pos)) + '" aria-hidden="true"></span>' +
+            '<strong>' + esc(formatBrickLabel(brick, tText)) + '</strong>' +
+            '<span class="muted small">' + esc(tText('overview.brickSize', { n: brick.size })) + '</span>' +
+            '<span class="muted small wb-wall-due">' + esc(brick.phase === 'sealed' ? tText('wall.current') : dueLabel(brick)) + '</span>' +
+          '</header>' +
+          '<div class="wb-wall-cells">' + cells.join('') + '</div>' +
+        '</section>';
+      }).join('');
+    }
   }
-  if (view === 'passive') renderDigest();
-  if (view === 'pool') renderInbox();
+  renderWallRail(sorted);
+}
+
+/* The left column: every brick, with its ten cells at a glance. Each row is
+ * also how a specific brick is taken off the wall. */
+function renderWallRail(bricks) {
+  var list = el('wbWallList');
+  if (!list) return;
+  if (!bricks.length) { list.innerHTML = ''; return; }
+  list.innerHTML = bricks.map(function (brick) {
+    var cells = (brick.wordKeys || []).map(function (key) {
+      return '<span class="wb-mini-cell" data-pos="' + esc(groupOf(posOf(key))) + '"></span>';
+    }).join('');
+    var active = state.brick && state.brick.id === brick.id;
+    return '<button class="wb-rail-row' + (active ? ' is-active' : '') + '" type="button" data-grab="' + esc(brick.id) + '">' +
+      '<span class="wb-mini" data-phase="' + esc(brick.phase) + '">' + cells + '</span>' +
+      '<span class="wb-rail-main"><strong>' + esc(formatBrickLabel(brick, tText)) + '</strong>' +
+      '<span class="muted small">' + esc(tText(phaseKey(brick))) + ' · ' + esc(dueLabel(brick)) + '</span></span>' +
+    '</button>';
+  }).join('');
+}
+
+/* Take a brick off the wall and start its session. */
+async function grabBrick(brickIdValue) {
+  var brick = brickIdValue ? await state.lex.getBrick(brickIdValue) : await state.lex.nextBrick(Date.now());
+  var note = el('wbPoolNote');
+  if (!brick) {
+    if (note) { note.textContent = tText('wall.empty'); show(note, true); }
+    return;
+  }
+  state.brick = brick;
+  state.queue = await state.lex.brickQueue(brick.id, Date.now());
+  state.index = 0;
+  state.flipped = false;
+  state.brickPaced = false;
+  state.brickResult = null;
+  state.sessionAgains = 0;
+  state.view = 'review';
+  renderCard();
+  go('#wall/review');
+}
+
+/* 海 - the entry card. The board's middle column: what the word is, where it
+ * sits on the ladder, the brick it is in, its cards, and where it came from. */
+function entrySense(wordKey) {
+  var word = state.wordByLemma[wordKey];
+  if (!word) return null;
+  var sids = word.senseIds || [];
+  for (var i = 0; i < sids.length; i += 1) {
+    if (state.senseById[sids[i]]) return state.senseById[sids[i]];
+  }
+  return null;
+}
+
+function brickOf(wordKey) {
+  for (var i = 0; i < state.bricks.length; i += 1) {
+    if ((state.bricks[i].wordKeys || []).indexOf(wordKey) >= 0) return state.bricks[i];
+  }
+  return null;
+}
+
+async function renderEntry() {
+  var node = el('wbEntry');
+  if (!node) return;
+  var key = state.entryKey;
+  if (!key || !state.wordByLemma[key]) {
+    node.innerHTML = '<p class="muted">' + esc(tText('entry.empty')) + '</p>';
+    return;
+  }
+  var word = state.wordByLemma[key];
+  var sense = entrySense(key);
+  var definition = sense && sense.definition ? (sense.definition.text || '') : '';
+  var record = state.encounterByKey[key] || null;
+  var brick = brickOf(key);
+  var cards = sense ? (state.cardsBySense[sense.id] || []) : [];
+
+  var html = '<header class="wb-entry-head">' +
+    '<h2 class="wb-entry-term">' + esc(word.lemma) + '</h2>' +
+    (word.reading ? '<span class="card-reading">' + esc(word.reading) + '</span>' : '') +
+    '<span class="wb-chips">' +
+      '<span class="wb-chip">' + esc(posOf(key) || '') + '</span>' +
+      '<span class="wb-chip">' + esc(tText(stateKeyOf(key))) + '</span>' +
+    '</span>' +
+  '</header>';
+  if (definition) html += '<p class="wb-definition">' + esc(definition) + '</p>';
+
+  var steps = [
+    ['sea.state.candidate', 'new'],
+    ['sea.state.waiting', 'carded'],
+    ['sea.state.bricked', 'bricked']
+  ];
+  var reached = record ? record.state : 'new';
+  var at = { new: 0, inbox: 0, carded: 1, bricked: 2, known: 3, dismissed: 3 }[reached];
+  html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.state')) + '</h3><div class="wb-bars">' +
+    steps.map(function (step, index) {
+      return '<div class="wb-bar-row' + (at != null && index <= at ? ' is-reached' : '') + '">' +
+        '<span class="wb-bar-label">' + esc(tText(step[0])) + '</span></div>';
+    }).join('') +
+  '</div></section>';
+
+  if (brick) {
+    html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.brick')) + '</h3>' +
+      '<p><strong>' + esc(formatBrickLabel(brick, tText)) + '</strong> ' +
+      '<span class="muted small">' + esc(tText('overview.brickSize', { n: brick.size })) + ' · ' + esc(dueLabel(brick)) + '</span>' +
+      '<button class="btn btn-ghost btn-small" type="button" data-entry-brick="' + esc(brick.id) + '">' + esc(tText('entry.seeInWall')) + '</button></p></section>';
+  }
+
+  if (cards.length) {
+    html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.modes')) + '</h3>' +
+      cards.map(function (card) {
+        var due = card.srs && card.srs.due ? card.srs.due - Date.now() : 0;
+        return '<div class="wb-card-row"><span>' + esc(modeLabel(card.mode)) + '</span>' +
+          '<span class="muted small">' + esc(formatDue(due)) + '</span></div>';
+      }).join('') + '</section>';
+  }
+
+  var contexts = record && Array.isArray(record.contexts) ? record.contexts : [];
+  if (contexts.length) {
+    var context = contexts[0];
+    html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.origin')) + '</h3>' +
+      '<p class="muted small">' + esc(context.source || '') + ' · ' + esc(tRel(context.ts)) + ' · ' + esc(String(record.count || 0)) + '</p>' +
+      (context.ja ? '<p class="card-example">' + esc(context.ja) + '</p>' : '') +
+    '</section>';
+  }
+
+  html += '<div class="row-actions">' +
+    '<button class="btn btn-primary btn-small" type="button" data-entry-review="' + esc(key) + '">' + esc(tText('entry.reviewInWall')) + '</button>' +
+    (brick ? '<button class="btn btn-ghost btn-small" type="button" data-entry-return="' + esc(key) + '">' + esc(tText('entry.returnToPool')) + '</button>' : '') +
+    (sense ? '<button class="btn btn-ghost btn-small" type="button" data-entry-known="' + esc(sense.id) + '">' + esc(tText('dict.known')) + '</button>' : '') +
+  '</div>';
+  node.innerHTML = html;
+}
+
+/* 海 - 単語総覧. The left list is the learner's own vocabulary, filtered by the
+ * search box above it. */
+async function renderBrowse() {
+  var filter = state.browseFilter.normalize('NFKC').toLowerCase();
+  var keys = Object.keys(state.wordByLemma);
+  var rows = [];
+  keys.forEach(function (key) {
+    var word = state.wordByLemma[key];
+    var sense = entrySense(key);
+    var definition = sense && sense.definition ? (sense.definition.text || '') : '';
+    var haystack = (key + ' ' + (word.reading || '') + ' ' + definition).toLowerCase();
+    if (filter && haystack.indexOf(filter) < 0) return;
+    rows.push('<button class="wb-row" type="button" data-word="' + esc(key) + '"' + (key === state.entryKey ? ' aria-current="true"' : '') + '>' +
+      monogram(key) +
+      '<span class="wb-row-main"><strong>' + esc(key) + '</strong>' +
+      '<span class="muted small">' + esc(definition) + '</span></span>' +
+      '<span class="wb-row-meta">' + esc(tText(stateKeyOf(key))) + '</span>' +
+    '</button>');
+  });
+  var body = el('wbBrowseBody');
+  if (body) body.innerHTML = rows.length ? rows.join('') : '<p class="muted">' + esc(tText('wb.empty.browse')) + '</p>';
+  if (state.entryKey && !state.wordByLemma[state.entryKey]) state.entryKey = null;
+  if (!state.entryKey && keys.length) state.entryKey = keys[0];
+  await renderEntry();
+}
+
+/* 海 - 辞書. One block per dictionary, in lookupGrouped()'s order; the lookup
+ * trail beside it is what makes the column a dictionary rather than a list. */
+async function renderDict(term) {
+  var blocks = el('wbDictBlocks');
+  var result = el('wbDictResult');
+  if (!blocks) return;
+  var query = (term == null ? (el('wbDictSearch') ? el('wbDictSearch').value : '') : term).trim();
+  if (result) show(result, false);
+  if (!query) {
+    blocks.innerHTML = '<p class="muted">' + esc(tText('dict.empty')) + '</p>';
+    return;
+  }
+  var dict = state.dictionary;
+  if (!dict || typeof dict.lookupGrouped !== 'function') {
+    blocks.innerHTML = '<p class="muted">' + esc(tText('wb.dict.unavailable')) + '</p>';
+    return;
+  }
+  blocks.innerHTML = '<p class="muted">' + esc(tText('dict.searching')) + '</p>';
+  var groups = [];
+  try { groups = await dict.lookupGrouped(query); } catch (err) { groups = []; }
+  var shown = visibleGroups(groups, hiddenFrom(readHidden()));
+  if (!shown.length) {
+    blocks.innerHTML = '<p class="muted">' + esc(tText('wb.empty.browse')) + '</p>';
+    return;
+  }
+  blocks.innerHTML = shown.map(function (group) {
+    var badge = languageBadge(group);
+    var head = '<header class="wb-dict-head"><strong>' + esc(sourceTitle(group)) + '</strong>' +
+      (badge ? '<span class="wb-chip">' + esc(tText(badge)) + '</span>' : '') +
+      '<span class="muted small">' + esc(String(group.entryCount || 0)) + '</span></header>';
+    var body = group.entries.map(function (entry) {
+      var headline = entryHeadline(entry);
+      var first = entry.senses && entry.senses.length ? entry.senses[0] : null;
+      var chips = entryChips(entry, first).map(function (chip) {
+        return '<span class="wb-chip">' + esc(chip.text || tText(chip.key)) + '</span>';
+      }).join('');
+      var blocksOfSenses = senseBlocks(entry).map(function (block, index) {
+        return '<div class="wb-sense"><span class="wb-sense-no">' + esc(block.numbered ? String(index + 1) : '') + '</span>' +
+          '<span class="wb-sense-text">' + block.lines.map(esc).join('<br>') + '</span></div>';
+      }).join('');
+      return '<article class="wb-dict-entry"><h3 class="wb-entry-term">' + esc(headline.headword) + '</h3>' +
+        (headline.reading ? '<span class="card-reading">' + esc(headline.reading) + '</span>' : '') +
+        '<span class="wb-chips">' + chips + '</span>' + blocksOfSenses + '</article>';
+    }).join('');
+    return '<section class="wb-dict-block" data-dict="' + esc(group.id) + '">' + head + body +
+      '<p class="muted small">' + esc(group.attribution || group.licence || '') + '</p></section>';
+  }).join('');
+  state.dictGroups = shown;
+  renderDictHistory();
+}
+
+function readHidden() {
+  try { return JSON.parse(window.localStorage.getItem('ml.dictHidden') || '[]'); } catch (err) { return []; }
+}
+
+function renderDictHistory() {
+  var list = el('wbDictHistory');
+  if (!list) return;
+  var rows = readLookupLog();
+  list.innerHTML = rows.length ? rows.map(function (row) {
+    return '<button class="wb-row" type="button" data-dict-term="' + esc(row.term) + '">' +
+      monogram(row.term) +
+      '<span class="wb-row-main"><strong>' + esc(row.term) + '</strong>' +
+      '<span class="muted small">' + esc(row.gloss || row.reading || '') + '</span></span>' +
+      '<span class="wb-row-meta">' + esc(tRel(row.at)) + '</span>' +
+    '</button>';
+  }).join('') : '<p class="muted small">' + esc(tText('dict.empty')) + '</p>';
+}
+
+/* 海 - the right column's counts and the state ladder. */
+function renderBreakdown(node, rows) {
+  if (!node) return;
+  var max = 1;
+  rows.forEach(function (row) { if (row[1] > max) max = row[1]; });
+  node.innerHTML = rows.map(function (row) {
+    return '<div class="wb-bar-row"><span class="wb-bar-label">' + esc(row[0]) + '</span>' +
+      '<span class="wb-bar" data-pos="' + esc(row[3] || 'mixed') + '"><span style="width:' + esc(String(Math.round((row[1] / max) * 100))) + '%"></span></span>' +
+      '<span class="wb-bar-value">' + esc(String(row[1])) + '</span></div>';
+  }).join('');
+}
+
+function renderSeaStats() {
+  var s = state.stats || {};
+  var cells = [
+    [tText('sea.stats.keys'), state.dictCount || 0],
+    [tText('sea.stats.mine'), s.words || 0],
+    [tText('sea.stats.cards'), state.cardCount || 0],
+    [tText('sea.stats.bricks'), s.bricks || 0]
+  ];
+  var stats = el('wbSeaStats');
+  if (stats) {
+    stats.innerHTML = cells.map(function (cell) {
+      return '<div class="wb-stat"><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>';
+    }).join('');
+  }
+  var byState = {};
+  (state.pool || []).forEach(function (item) {
+    byState[item.state] = (byState[item.state] || 0) + 1;
+  });
+  renderBreakdown(el('wbSeaBreakdown'), [
+    [tText('sea.state.candidate'), (state.inbox || []).length, null, 'mixed'],
+    [tText('sea.state.waiting'), byState.carded || 0, null, 'verb'],
+    [tText('sea.state.bricked'), byState.bricked || 0, null, 'noun'],
+    [tText('sea.state.known'), byState.known || 0, null, 'mixed'],
+    [tText('sea.state.ignored'), byState.dismissed || 0, null, 'mixed']
+  ].map(function (row) { return [row[0], row[1], null, row[3]]; }));
+}
+
+/* ------------------------------------------------------------------- view */
+
+/* The route is the view, and 海's three parts are in the route too, so a link
+ * to the dictionary and a tap on the dictionary segment land in the same place,
+ * and a refresh no longer forgets where the learner was.
+ *
+ *   #wall   #wall/review   #river   #pool
+ *   #sea    #sea/bricks    #sea/dict
+ */
+var VIEWS = {
+  wall: { panel: 'wbWall' },
+  review: { panel: 'wbReview' },
+  river: { panel: 'wbRiver' },
+  pool: { panel: 'wbPool' },
+  words: { panel: 'wbSea', scope: 'words' },
+  bricks: { panel: 'wbSea', scope: 'bricks' },
+  dict: { panel: 'wbSea', scope: 'dict' },
+  data: { panel: 'wbData' }
+};
+
+var ROUTES = {
+  '#wall': 'wall',
+  '#wall/review': 'review',
+  '#river': 'river',
+  '#pool': 'pool',
+  '#sea': 'words',
+  '#sea/bricks': 'bricks',
+  '#sea/dict': 'dict',
+  '#data': 'data'
+};
+
+/* Which capsule sub-item owns a view. 壁's drill and the settings sheet have no
+ * destination of their own. */
+var CAPSULE_VIEW = {
+  wall: 'wall', review: 'wall', river: 'river', pool: 'pool',
+  words: 'sea', bricks: 'sea', dict: 'sea', data: 'pool'
+};
+
+function routeView(hash) {
+  return ROUTES[hash] || 'wall';
+}
+
+function scopeHash(scope) {
+  if (scope === 'bricks') return '#sea/bricks';
+  if (scope === 'dict') return '#sea/dict';
+  return '#sea';
+}
+
+/* The capsule is static markup on every page; this only says which item is the
+ * current one. The wordbook does it here because only it knows the sub-route. */
+function markCapsule(view) {
+  var key = CAPSULE_VIEW[view] || 'wall';
+  var subs = document.querySelectorAll('.tabbar-sub[data-view]');
+  for (var i = 0; i < subs.length; i += 1) {
+    var on = subs[i].getAttribute('data-view') === key;
+    subs[i].classList.toggle('is-active', on);
+    if (on) subs[i].setAttribute('aria-current', 'page');
+    else subs[i].removeAttribute('aria-current');
+  }
+  var tops = document.querySelectorAll('.tabbar-item[data-tab]');
+  for (var j = 0; j < tops.length; j += 1) {
+    var here = tops[j].getAttribute('data-tab') === 'vocab';
+    tops[j].classList.toggle('is-active', here);
+    if (here) tops[j].setAttribute('aria-current', 'page');
+  }
+}
+
+function markSeaScope(scope) {
+  state.scope = scope;
+  var segments = document.querySelectorAll('#wbSeaSeg [data-scope]');
+  for (var i = 0; i < segments.length; i += 1) {
+    var on = segments[i].getAttribute('data-scope') === scope;
+    segments[i].classList.toggle('is-active', on);
+    segments[i].setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+  var blocks = document.querySelectorAll('#wbSea [data-scope-block]');
+  for (var j = 0; j < blocks.length; j += 1) {
+    show(blocks[j], blocks[j].getAttribute('data-scope-block') === scope);
+  }
+}
+
+function setView(view) {
+  if (!VIEWS[view]) view = 'wall';
+  state.view = view;
+  var panel = VIEWS[view].panel;
+  Object.keys(VIEWS).forEach(function (key) {
+    show(el(VIEWS[key].panel), VIEWS[key].panel === panel);
+  });
+  if (VIEWS[view].scope) markSeaScope(VIEWS[view].scope);
+  markCapsule(view);
+
+  if (view === 'wall') renderWall();
+  if (view === 'review') renderCard();
+  if (view === 'pool') renderPool();
+  if (view === 'words') renderBrowse();
   if (view === 'bricks') renderBricks();
-  if (view === 'lexicon') renderBrowse();
+  if (view === 'dict') renderDict();
   if (view === 'river') startRiver();
   else stopRiver();
 }
 
-/* The hash is the route: #learn or #overview. A section switch lands on that
- * section's first view, so the two never show at once. */
 function route() {
-  var section = window.location.hash === '#overview' ? 'overview' : 'learn';
-  state.section = section;
-  var sections = document.querySelectorAll('.wb-section');
-  for (var i = 0; i < sections.length; i += 1) {
-    show(sections[i], sections[i].getAttribute('data-section') === section);
-  }
-  var current = VIEWS[state.view];
-  if (!current || current.section !== section) {
-    setView(section === 'overview' ? 'pool' : 'brick');
-  }
+  setView(routeView(window.location.hash));
 }
 
 async function renderBricks() {
-  var list = el('wbBricksList');
-  if (!list) return;
   var bricks = await state.lex.listBricks();
-  if (!bricks.length) {
-    list.innerHTML = '<p class="muted mb-0">' + esc(tText('wb.bricks.empty')) + '</p>';
-    return;
+  state.bricks = bricks;
+  var note = el('wbBricksNote');
+  if (note) note.textContent = tText('sea.bricks.lede', { n: bricks.length });
+
+  var list = el('wbBricksList');
+  if (list) {
+    list.innerHTML = bricks.length ? bricks.map(function (brick) {
+      var words = (brick.wordKeys || []).map(function (key) {
+        return '<span class="wb-brick-word" data-pos="' + esc(groupOf(posOf(key))) + '">' + esc(key) + '</span>';
+      }).join('');
+      return '<article class="wb-inbox-item" data-brick="' + esc(brick.id) + '">' +
+        '<div class="wb-inbox-head"><strong>' + esc(brickLabel(brick)) + '</strong>' +
+        '<span class="wb-inbox-seen">' + esc(tText('overview.brickSize', { n: brick.size })) + '</span>' +
+        '<span class="muted small">' + esc(tText(phaseKey(brick))) + ' · ' + esc(dueLabel(brick)) + '</span></div>' +
+        '<p class="wb-brick-words">' + words + '</p>' +
+        '<div class="wb-inbox-actions">' +
+        '<button class="btn btn-primary btn-small" type="button" data-grab-brick="' + esc(brick.id) + '">' + esc(tText('sea.bricks.grab')) + '</button>' +
+        '<button class="btn btn-ghost btn-small" type="button" data-brick-dissolve="' + esc(brick.id) + '">' + esc(tText('wb.bricks.dissolve')) + '</button>' +
+        '</div></article>';
+    }).join('') : '<p class="muted mb-0">' + esc(tText('wb.bricks.empty')) + '</p>';
   }
-  list.innerHTML = bricks.map(function (brick) {
-    var days = Math.max(0, Math.round(((brick.due || 0) - Date.now()) / 86400000));
-    var due = days <= 0 ? tText('overview.dueNow') : tText('overview.dueIn', { n: days });
-    return '<article class="wb-inbox-item">' +
-      '<div class="wb-inbox-head"><strong>' + esc(brickLabel(brick)) + '</strong>' +
-      '<span class="wb-inbox-seen">' + esc(tText('overview.brickSize', { n: brick.size })) + '</span></div>' +
-      '<p class="muted small mb-0">' + esc(tText('overview.phase.' + brick.phase)) + ' · ' + esc(due) + '</p>' +
-      '<div class="wb-inbox-actions">' +
-      '<button class="btn btn-ghost btn-small" type="button" data-brick-dissolve="' + esc(brick.id) + '">' + esc(tText('wb.bricks.dissolve')) + '</button>' +
-      '</div></article>';
-  }).join('');
+
+  var grid = el('wbBricksGrid');
+  if (grid) {
+    grid.innerHTML = bricks.map(function (brick) {
+      var cells = (brick.wordKeys || []).map(function (key) {
+        return '<span class="wb-mini-cell" data-pos="' + esc(groupOf(posOf(key))) + '"></span>';
+      }).join('');
+      return '<div class="wb-mini-row" data-phase="' + esc(brick.phase) + '" aria-hidden="true">' + cells + '</div>';
+    }).join('');
+  }
+}
+
+/* 池へ戻す - one word leaves its brick; the cards and the schedule stay. */
+async function returnFromBrick(wordKey) {
+  if (!brickOf(wordKey)) return;
+  await state.lex.removeFromBrick(wordKey);
+  await refresh();
+  await renderWall();
+  await renderBricks();
+  await renderEntry();
+}
+
+/* P1 packs the waiting pool with the greedy packer. The two sheets that let the
+ * learner choose the ten words land next; this keeps 池 usable until then. */
+async function buildFromPool() {
+  var built = await state.lex.buildBricks({ partial: false });
+  var note = el('wbPoolNote');
+  if (note) {
+    note.textContent = built.length
+      ? tText('pool.built', { name: brickLabel(built[0]), n: built[0].size })
+      : tText('pool.pick.empty');
+    show(note, true);
+  }
+  built.forEach(function (brick) {
+    pushPoolLog({ event: POOL_EVENT.toBrick, name: brickLabel(brick), size: brick.size, at: Date.now() });
+  });
+  await refresh();
+  await renderPool();
+  await renderWall();
+  await renderBricks();
 }
 
 async function dissolveBrick(id) {
   await state.lex.dissolveBrick(id);
   await refresh();
   await renderBricks();
-  await renderInbox();
+  await renderPool();
 }
 
 function bind() {
-  var tabs = document.querySelectorAll('.wb-tab');
-  for (var i = 0; i < tabs.length; i += 1) {
-    tabs[i].addEventListener('click', function (event) {
-      setView(event.currentTarget.getAttribute('data-view'));
+  var seaSegments = document.querySelectorAll('#wbSeaSeg [data-scope]');
+  for (var s = 0; s < seaSegments.length; s += 1) {
+    seaSegments[s].addEventListener('click', function (event) {
+      go(scopeHash(event.currentTarget.getAttribute('data-scope')));
     });
   }
+  var poolFilters = document.querySelectorAll('#wbPoolFilter [data-pool-filter]');
+  for (var f = 0; f < poolFilters.length; f += 1) {
+    poolFilters[f].addEventListener('click', function (event) {
+      state.poolFilter = event.currentTarget.getAttribute('data-pool-filter');
+      applyPoolFilter();
+    });
+  }
+  el('wbWallGrab').addEventListener('click', function () { grabBrick(null); });
+  el('wbWallReviewNow').addEventListener('click', function () {
+    grabBrick(state.brick ? state.brick.id : null);
+  });
+  el('wbWallList').addEventListener('click', function (event) {
+    var target = event.target;
+    var id = target && target.getAttribute ? target.getAttribute('data-grab') : null;
+    if (id) grabBrick(id);
+  });
+  el('wbPoolBuild').addEventListener('click', buildFromPool);
   el('wbCard').addEventListener('click', function () {
     if (state.lookOnly) nextLookOnly();
     else if (!state.flipped) flip();
@@ -964,7 +1508,7 @@ function bind() {
   el('wbFlip').addEventListener('click', flip);
   el('wbLookOnly').addEventListener('click', toggleLookOnly);
   el('wbNext').addEventListener('click', nextLookOnly);
-  el('wbInboxRefresh').addEventListener('click', renderInbox);
+  el('wbPoolRefresh').addEventListener('click', renderPool);
   el('wbEnrol').addEventListener('click', enrolCandidates);
   el('wbMineAdd').addEventListener('click', mineAdd);
   el('wbImportRun').addEventListener('click', runImport);
@@ -997,7 +1541,7 @@ function bind() {
     });
   }
   document.addEventListener('keydown', function (event) {
-    if (state.view !== 'brick') return;
+    if (state.view !== 'review') return;
     if (event.code === 'Space') {
       event.preventDefault();
       if (state.lookOnly) nextLookOnly();
@@ -1008,23 +1552,46 @@ function bind() {
       grade(Number(event.key));
     }
   });
-  el('wbDigestRefresh').addEventListener('click', function () {
-    state.digestSeen = {};
-    renderDigest();
-  });
   el('wbSearch').addEventListener('input', function (event) {
     state.browseFilter = event.target.value;
     renderBrowse();
+  });
+  el('wbDictSearch').addEventListener('input', function (event) {
+    renderDict(event.target.value);
+  });
+  el('wbDictHistory').addEventListener('click', function (event) {
+    var target = event.target;
+    var term = target && target.getAttribute ? target.getAttribute('data-dict-term') : null;
+    if (!term) return;
+    var input = el('wbDictSearch');
+    if (input) input.value = term;
+    renderDict(term);
+  });
+  el('wbBrowseBody').addEventListener('click', function (event) {
+    var target = event.target;
+    var key = target && target.getAttribute ? target.getAttribute('data-word') : null;
+    if (!key) return;
+    state.entryKey = key;
+    renderBrowse();
+  });
+  el('wbEntry').addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var review = target.getAttribute('data-entry-review');
+    var back = target.getAttribute('data-entry-return');
+    var known = target.getAttribute('data-entry-known');
+    var brick = target.getAttribute('data-entry-brick');
+    if (review) {
+      var own = brickOf(review);
+      grabBrick(own ? own.id : null);
+    } else if (brick) grabBrick(brick);
+    else if (back) returnFromBrick(back);
+    else if (known) markKnown(known);
   });
   el('wbExport').addEventListener('click', exportJson);
   el('wbReset').addEventListener('click', resetAll);
   el('wbRiverPause').addEventListener('click', toggleRiver);
   el('wbRiverShuffle').addEventListener('click', startRiver);
-  el('wbDigestList').addEventListener('click', function (event) {
-    var target = event.target;
-    var known = target.getAttribute ? target.getAttribute('data-known') : null;
-    if (known) markKnown(known);
-  });
   el('wbInboxList').addEventListener('click', function (event) {
     var target = event.target;
     if (!target || !target.getAttribute) return;
@@ -1035,19 +1602,22 @@ function bind() {
   });
   el('wbBricksList').addEventListener('click', function (event) {
     var target = event.target;
-    var id = target && target.getAttribute ? target.getAttribute('data-brick-dissolve') : null;
-    if (id) dissolveBrick(id);
+    if (!target || !target.getAttribute) return;
+    var grab = target.getAttribute('data-grab-brick');
+    var id = target.getAttribute('data-brick-dissolve');
+    if (grab) grabBrick(grab);
+    else if (id) dissolveBrick(id);
   });
   window.addEventListener('hashchange', route);
 }
 
 async function init() {
   try {
-    /* Load the shared dictionary module with no bundled packs: there is no
-     * pack host in this repository. A Yomitan dictionary that the learner
-     * imported earlier is restored from IndexedDB, and definitions come from
-     * it the moment it is available. */
-    state.dictionary = await loadDictionary({ packs: [] });
+    /* The shared dictionary module ships JMdict common out of dict/ and
+     * restores any Yomitan dictionary the learner imported earlier. A test
+     * environment has no fetch, so the pack is only asked for where it can be
+     * fetched; the Yomitan path does not depend on the pack at all. */
+    state.dictionary = await loadDictionary({ packs: typeof fetch === 'function' ? ['common'] : [] });
     await restoreDictionaries();
     await refreshDictionary();
 
@@ -1055,11 +1625,13 @@ async function init() {
     state.lex = new Lexicon(db);
     await state.lex.seedFromLegacy(window.ML_DATA ? window.ML_DATA.vocab : [], SEED_DEFS);
     await state.lex.enrichFromDictionary(state.dictionary);
+    state.entryKey = null;
     await refresh();
-    var activeTab = document.querySelector('.wb-tab.is-active');
-    state.view = activeTab ? activeTab.getAttribute('data-view') : 'brick';
     await startReview();
     bind();
+    await renderPool();
+    await renderWall();
+    await renderBricks();
     route();
   } catch (err) {
     var main = document.querySelector('main');

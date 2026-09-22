@@ -1,9 +1,13 @@
 # iPad-first redesign: the iOS shell and the brick model
 
-Status: **decisions locked; P0 to P3 are implemented.** This supersedes the page and
-navigation parts of `ja-vocab-book-design.md`. The engine described there -
-schema, FSRS-6, passive track, mining funnel, shared dictionary - is reused
-unchanged.
+Status: **decisions locked; P0 to P3 are implemented - and the navigation and
+section parts of this document are superseded.** On 2026-09-22 the human replaced
+the bottom tab bar and the two sections with one floating capsule and four
+vocabulary destinations (壁 / 川 / 池 / 海), and deleted the passive track. The
+current architecture is `README.md` section "The wordbook" and
+`docs/coordination/log-wordbook.md`; where this file disagrees with them, they
+win. Everything about the engine - schema, FSRS-6, the mining funnel, the shared
+dictionary - still holds.
 
 ## 1. Why a redesign
 

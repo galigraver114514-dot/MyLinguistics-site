@@ -2,6 +2,55 @@
 
 Newest entries at the top. Only agent-wordbook writes here.
 
+## 2026-09-22 - 語彙 becomes 壁 / 川 / 池 / 海, and the route becomes the navigation
+
+P1 of the approved plan, in **one commit** because the markup, the route and the
+tests are one contract: split across commits, `main` is red, and `main` is a
+deploy. **373 tests pass.**
+
+### What the page is now
+
+| Was | Now |
+| --- | --- |
+| bottom tab bar and a large-title nav bar | one floating capsule, `#tabbar.capsule`, static in all three pages |
+| `data-tab="reader|learn|overview"` | `data-tab="home|reader|vocab"`, plus `a.tabbar-sub[data-view=wall|river|pool|sea]` on study.html only |
+| two sections, an in-page `.wb-tabs` row | one `[data-section="vocab"]`, four destinations, no tab row |
+| `#learn` / `#overview` | `#wall` `#wall/review` `#river` `#pool` `#sea` `#sea/bricks` `#sea/dict` |
+| passive / 受け身 | deleted - the view, its strings, and `wb.done.note` pointing at it. `digest.js` stays: 既知 still uses familiarity |
+
+57 i18n keys lost their last consumer and are gone; 130 new ones arrived in the
+commit before this one.
+
+### Decisions worth keeping
+
+- **The route is the navigation.** The capsule's sub-items are real links and 海's
+  segmented control writes the hash, so every destination has a URL, a refresh
+  keeps its place, and the defect where `route()` forgot the view cannot come
+  back. `#wall/review` is the drill; `#sea/dict` is the dictionary.
+- **壁 renders words, not a distribution.** Each of a brick's ten cells carries
+  the word itself. A colour block nobody can read is not an information carrier.
+- **池 shows ブリック待ち by default and keeps 候補 behind a filter.** The design
+  gives candidates no screen, and deleting an approval step is the human's call,
+  not this commit's. `#wbEnrol` still cards them.
+- **`#wbData` stays reachable** as a hidden panel until its home is decided.
+  Nothing is deleted before that.
+- **The capsule keeps `#tabbar` and `.tabbar-item[data-tab]`**, because
+  `reader/js/app.js` detects the shell through `.tabbar`; renaming it would break
+  the reader from a page that is not mine.
+- **The wordbook marks its own capsule items.** shell.js only knows the three
+  top-level pages; only entry.js knows `#sea/dict`, so `markCapsule()` lives here.
+
+### Left for the next pass
+
+- **P2** the wall's detail: the 段 count, per-brick 掴む, and the footer pair. The
+  wall renders real bricks and readable cells today.
+- **P3** the two sheets. `#wbPoolBuild` packs with the greedy packer until
+  `選ぶ` / `設定` replace it; `formBricks({ selected })` is already waiting.
+- **P4** 辞書's right column: the source list, the eye toggles, `usage()` and the
+  JMdict attribution. The blocks themselves render today, from `lookupGrouped()`.
+- **P5** `docs/ja-vocab-book-redesign.md` carries a superseding header only; its
+  body still describes the bottom tab bar.
+
 ## 2026-09-22 - the engine seams land, and the 語彙 contract goes out
 
 The human's table of eleven items is arbitrated (see `log-reader.md`), and the

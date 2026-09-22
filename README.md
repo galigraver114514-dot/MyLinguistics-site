@@ -26,9 +26,9 @@ The interface switches between English, Chinese, and Japanese.
 - **Your own dictionary** - import a Yomitan JP-JP dictionary (a zip). It
   persists in the browser, backs the definitions, sharpens word segmentation,
   and feeds the word river's pool.
-- **An iPad app shell** - a global bottom tab bar (Reader / Learn / Overview),
-  a large-title navigation bar, bottom sheets, safe-area handling, and a
-  home-screen launch with no browser chrome.
+- **An iPad app shell** - one floating capsule (Home / Reading / Vocabulary)
+  that expands in place on 語彙 to reveal 壁 / 川 / 池 / 海, bottom sheets,
+  safe-area handling, and a home-screen launch with no browser chrome.
 - **Data ownership** - IndexedDB holds the lexicon and the reader's books;
   localStorage holds only the interface language and the theme.
 
@@ -36,15 +36,15 @@ The interface switches between English, Chinese, and Japanese.
 
     .
     |-- index.html            Home
-    |-- study.html            Learn: the wordbook
-    |-- overview.html         Overview (a placeholder until P3)
+    |-- study.html            Vocabulary: 壁 / 川 / 池 / 海
+    |-- overview.html         A one-line redirect to study.html#wall, for old links
     |-- about.html            How it fits together
     |-- 404.html              Fallback page
     |-- manifest.webmanifest  Home-screen launch metadata
     |-- assets/
     |   |-- css/tokens.css    Design tokens (iOS palette, type, spacing)
     |   |-- css/style.css     Shared component styles
-    |   |-- css/shell.css     Navigation bar, tab bar, bottom sheet
+    |   |-- css/shell.css     The floating capsule, sheets, iOS lists
     |   |-- css/wordbook.css  Wordbook styles
     |   |-- js/data.js        The Japanese seed
     |   |-- js/i18n.js        Interface strings (en / zh / ja)
@@ -64,29 +64,32 @@ The interface switches between English, Chinese, and Japanese.
 
 ## The wordbook
 
-The app has one global shell: a bottom tab bar (Reader / Learn / Overview), a
-large-title navigation bar, and bottom sheets. `Home` and `About` sit in the
-bar's `more` sheet. Adding the app to the iPad home screen launches it
-fullscreen, with no browser chrome.
+The app has one global shell: a floating capsule at the top with three
+destinations - **Home**, **Reading**, **Vocabulary** - and a `⋯` sheet that
+holds `Home`, `About`, the theme and the interface language. The capsule
+expands in place on 語彙 to reveal the four vocabulary destinations. Adding the
+app to the iPad home screen launches it fullscreen, with no browser chrome.
 
-`study.html` holds both sections; the bottom tab bar switches them.
+The vocabulary page is one page with four destinations and no in-page tab row.
+The route is the navigation, so every destination has a URL and a refresh keeps
+its place:
 
-- **Learn** (`study.html#learn`) is the doing surface.
-  - **Brick** schedules ten-word bricks with FSRS-6, recognition before
-    production. A **Look only** toggle shows every answer and advances without
-    grading.
-  - **River** is a vertical field of words in tategaki. Drag the rod and the
-    first word the hook touches goes into the pool.
-  - **Passive** is a context-rich digest you only read. It grows a decaying
-    familiarity score and never writes into the FSRS schedule.
-- **Overview** (`study.html#overview`) is the lexis.
-  - **Pool** holds every captured word. *Enrol* cards them and packs ten-word
-    bricks, and the same panel captures a word by hand.
-  - **Bricks** lists the bricks with their phase and next due date.
-  - **Lexicon** lists every word with recognition and card state.
-  - **Data** mines pasted text or a file, imports a frequency list (a word and a
-    rank per line, either order), imports a Yomitan dictionary, and exports or
-    restores a JSON backup.
+- **壁** (`study.html#wall`) is the wall: bricks taken from the sea, stacked in
+  the order they were reviewed. Every brick shows its ten words, and the drill
+  (`#wall/review`) schedules them with FSRS-6, recognition before production. A
+  **Look only** toggle shows every answer and advances without grading.
+- **川** (`study.html#river`) is a vertical field of words in tategaki. Drag the
+  rod and the first word the hook touches goes into the pool.
+- **池** (`study.html#pool`) is the packing workshop: the words waiting for a
+  brick, and the sheet that packs them. Candidates mined from text keep their own
+  list behind the filter.
+- **海** (`study.html#sea`) has three parts, switched by the segmented control at
+  the top of the left column:
+  - **単語** (`#sea`) lists your own vocabulary, with the entry card beside it.
+  - **ブリック** (`#sea/bricks`) lists the bricks and takes one to the wall.
+  - **辞書** (`#sea/dict`) looks a word up across every loaded dictionary - JMdict
+    ships with the site, and a Yomitan import adds a monolingual one - with the
+    trail of words you looked up beside it.
 - Definitions come from the shared dictionary module (`src/dict`): import a
   Yomitan JP-JP dictionary and mined or captured words take their definition
   from it. The seeded words keep the built-in monolingual glosses in
@@ -99,7 +102,7 @@ Run the tests with Node 20 or newer:
 
 ## Languages
 
-The navigation bar carries one switch: the **interface language**, English,
+The capsule carries one switch: the **interface language**, English,
 Chinese, or Japanese, stored under `ml.uilang`. The wordbook is Japanese only.
 
 ## Local preview
