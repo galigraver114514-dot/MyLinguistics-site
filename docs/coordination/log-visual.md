@@ -10,6 +10,46 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-23 - T5: the visual check is a kit in the repository now, not a recipe in a log
+
+The human asked for the verification tooling to be packaged so it can be reused
+rather than re-derived. It is `designs/verify/`:
+
+    sh designs/verify/setup.sh    # once: playwright + chromium, ~170 MB into /tmp
+    node designs/verify/run.mjs   # every route: PNGs + measured geometry
+    node designs/verify/run.mjs wall sea --out /tmp/look
+
+`run.mjs` serves the repository with `node:http` (no python, no dev server to
+remember to stop), drives chromium at 1194x834 with the interface language pinned
+to `ja`, screenshots each route **and prints the measured rect of every probed
+selector**. It exits non-zero when a page throws, an anchor selector is missing,
+or a document is taller than the viewport - so it is a gate, not only a report.
+`routes.json` is the whole configuration; adding a screen is three lines.
+
+Nothing is installed into the repository and `package.json` is untouched: the npm
+cache, the 658 MB of chromium and the screenshots all live under `/tmp/pw-kit`,
+which `setup.sh` writes an `env.sh` into. `designs/` is already excluded from the
+published site, so the kit is versioned without becoming a web page.
+
+**Where the kit lives is not a preference, it is the sandbox.** `~/.cache`,
+`~/.dsh` and `~/.local/share` are all refused under workspace-write, `~/.npm` is
+owned by another uid, and the system Firefox is a snap that `snap-confine`
+cannot start here. `/tmp` and the repository are what is left.
+
+Two traps are now encoded in the tool rather than in this log, because both cost
+me a round: **probe the visible view** (`main` is an ancestor of every view, so a
+document-order query returns the page and then measures a hidden view's
+elements - all zero rects and no error), and **probe outside the view when the
+thing being measured is outside it** (the capsule is an ancestor of the view,
+and on the reader the element worth measuring *is* the container, which
+`querySelector` cannot find inside itself).
+
+Verified by running it: 8/8 routes clean, every document exactly 834px, 海's
+columns 320/512/294, 川's working column 818 wide with its rail on the right, and
+the reader's rail at `[0,832,1194,2]` with a zero-width fill because no book is
+open. The empty states remain empty - the wall needs bricks and the pool sheets
+need words waiting to be packed.
+
 ## 2026-09-23 - T4: I can look at it now, and it found six things I could not have found by reading
 
 The human asked whether there is a way for me to verify the rendering myself,
