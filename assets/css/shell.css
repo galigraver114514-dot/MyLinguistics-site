@@ -50,7 +50,7 @@ body.has-shell {
   overflow: hidden;
   text-overflow: ellipsis;
   opacity: 1;
-  transition: opacity 0.18s ease;
+  transition: opacity var(--motion-fast) var(--ease-out);
 }
 .navbar.has-large .navbar-compact-title { opacity: 0; }
 .navbar.has-large.is-scrolled .navbar-compact-title { opacity: 1; }
@@ -149,7 +149,7 @@ body.has-shell {
   z-index: 50;
   background: rgba(0, 0, 0, 0.35);
   opacity: 0;
-  transition: opacity 0.22s ease;
+  transition: opacity var(--motion-base) var(--ease-out);
 }
 .sheet-backdrop.is-open { opacity: 1; }
 
@@ -166,7 +166,7 @@ body.has-shell {
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   box-shadow: var(--shadow-md);
   transform: translateY(102%);
-  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  transition: transform var(--motion-base) var(--ease-ios);
 }
 .sheet.is-open { transform: translateY(0); }
 

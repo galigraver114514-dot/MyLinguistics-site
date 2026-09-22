@@ -10,6 +10,68 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-22 - T1 continued: the design goes into git, and every hand-written duration goes through the tokens
+
+### The design is versioned; the PNGs are not
+
+`design.pen` (1.4 MB), `check-overlap.cjs` and a new `README.md` - what the
+eleven boards are, the colour contract, the seven rules, how to re-export. The
+deploy workflow already excludes this whole directory from the published site
+(agent-reader set that up in `ff33c47`), so this adds nothing to the web.
+`designs/exports/` stays out of git: the PNGs are derived, regenerable, and
+would be rewritten every design round. REQUEST sent for the `.gitignore` line.
+
+### Motion: six hand-written durations, now five tokens
+
+The audit found them; they are gone.
+
+| Was | Now | Where |
+| --- | --- | --- |
+| `0.18s ease` | `--motion-fast` + `--ease-out` | the compact nav title |
+| `0.22s ease` | `--motion-base` + `--ease-out` | the sheet backdrop |
+| `0.28s cubic-bezier(0.32,0.72,0,1)` | `--motion-base` + `--ease-ios` | the sheet |
+| `0.2s ease` | `--motion-base` + `--ease-out` | the wordbook progress fill |
+| `0.06s` / `0.15s` | `--motion-fast` + `--ease-out` | `.btn` press feedback |
+
+The sheet moved from 280 ms to 220 ms because `ui-redesign-plan.md` section 6
+assigns sheets to `--motion-base` and the token is the decision, not the old
+number. `grep -rn 'transition[^;]*[0-9]' assets/css/` returns nothing and the
+only `cubic-bezier` left in the directory are the two token definitions.
+
+`prefers-reduced-motion` turns motion **off**, not shorter. `shell.css` already
+had a block covering its three rules; `wordbook.css` and `style.css` had none
+and now do.
+
+### One more line out of the same audit
+
+`.wb-review-top .btn { margin-left: auto }` gave *every* button in the row an
+auto margin, so two buttons would spread apart instead of the group moving to
+the right. Now `:first-of-type`. With the single button that row has today the
+rendering is identical, which is why this is safe to do without a look.
+
+### Left alone, on purpose, with the reason
+
+- **The river's mask axis** (`linear-gradient(90deg, ...)`, `wordbook.css:230`).
+  The audit called it the wrong axis, but the axis that matters is the one the
+  field overflows along, and I cannot see the river rendered from here. Rewriting
+  a decorative mask on a guess is not worth it; it is on the list for the next
+  time the river is touched.
+- **Night-mode highlight alphas.** The `--hl-*` rename is free; a calibration
+  needs eyes on a dark page, and it is not in anyone's plan yet.
+
+### A red main waiting to happen, and not mine
+
+`src/lexicon/store.js:24` imports `DAY_MS` from `./brick.js` while line 37
+declares its own `const DAY_MS`. The suite dies with `SyntaxError: Identifier
+'DAY_MS' has already been declared` and 11 tests fail. It is agent-wordbook's
+in-flight edit, uncommitted, so `main` is fine **today** - but it is a red main
+the moment it is committed. I left it alone: it is their file and their
+refactor, and the protocol's answer to a collision is to wait or escalate, not
+to reach across. I verified it is not mine before saying so: no test reads any
+stylesheet except to assert the `<link>` is present, and
+`node --test tests/reader-*.test.js tests/shell.test.js tests/lang-switch.test.js`
+is 114/114 on that same tree.
+
 ## 2026-09-22 - T1: the two things agent-reader is blocked on, five REQUESTs, and the motion pass
 
 The arbitration in `log-reader.md` (commit `ff33c47`) is accepted as written: the
