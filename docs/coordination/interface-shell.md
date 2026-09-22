@@ -1,11 +1,23 @@
 # Interface: the shared shell and the reader
 
-**Version 0.3, after their shell commit c02fd13 landed with `markShell()`,
-`wireReader()` and `.shell-content` already built against this contract.
-Owner: agent-wordbook for the shell files, agent-reader for the reader side.**
+**Version 0.4. Owner: agent-visual for the shell, the design system and
+`reader/reader.css`; agent-reader for `reader/index.html` and `reader/js/**`.
+Changing this file is agent-reader's, since it lives in `docs/`.**
 
-The reader side is built and tested. This file now describes the boundary as it
-actually is, rather than as proposed.
+Version 0.3 was written when the shell belonged to agent-wordbook. The human
+reassigned the visual layer to agent-visual on 2026-09-22 (see
+`README.md`'s map), and 0.4 records that plus the three seams that came out of
+it: the page theme, the progress rail, and the version number.
+
+0.4 additions, all of them already implemented on both sides:
+
+- **The page theme is `data-page-theme`.** The site means light/dark by
+  `data-theme` and the reader means paper/white/night; one attribute cannot
+  carry two vocabularies, and the last writer won. `reader/reader.css` matches
+  both spellings for one release, so either side can land first.
+- **The progress rail.** `#rail` is the reader's markup; its look is the
+  stylesheet's. The seam is one custom property.
+- **One version number for the whole reader**, owned by `reader/index.html`.
 
 ## What the shell provides
 
@@ -22,10 +34,11 @@ surface run under the tab bar.
 
 ## What the reader keeps
 
-    reader/index.html        the reading surface and the reader's own sheets
+    reader/index.html        the reading surface, the reader's own sheets, and
+                             the single version number (agent-reader)
     reader/reader.css        the reading surface, dictionary panel, selection
-                             bar, hover bubble
-    reader/js/**             all reading logic, unchanged
+                             bar, hover bubble (agent-visual, visual layer only)
+    reader/js/**             all reading logic, unchanged (agent-reader)
 
 ## How the reader detects the shell
 
@@ -101,6 +114,85 @@ over, paste the exact nav-bar and tab-bar block for a reader page - or point at
 a page that already has it - and the reader will add it together with the
 stylesheet and script tags. `shell.js` already resolves the `/reader/` path
 to the `reader` tab, so nothing else should be needed.
+
+## The page theme: `data-page-theme`, and why not `data-theme`
+
+`<html data-theme>` used to carry two different vocabularies at once:
+
+| Writer | Values | Means |
+| --- | --- | --- |
+| site chrome (`assets/js/app.js`) | `light` / `dark` | the app's appearance |
+| the reader (`reader/index.html`, `reader/js/app.js`) | `paper` / `white` / `night` | the page's paper |
+
+Standalone that is harmless, because only one of them runs. Embedded in the
+shell it is not: the shell sets `data-theme="dark"` for the site while the
+reader sets `data-theme="paper"` for the page, the last writer wins, and both
+features break silently - the site loses its dark mode and the reader cannot
+follow it.
+
+**The rule: the site keeps `data-theme`, the reader writes
+`data-page-theme`, and both stay on `<html>`.** They answer different
+questions - what the app looks like, and what the paper is - so they get
+different names.
+
+For one release `reader/reader.css` matches both spellings on each theme rule,
+which is what lets either commit land first without a window where the page
+loses its paper. The `[data-theme='...']` half is deleted by agent-visual once
+the reader has moved; after that, **a revert of the reader's half is a two-sided
+revert**, not one revert.
+
+## The progress rail: the reader states the position, the stylesheet places it
+
+agent-visual's contract, implemented as written:
+
+    <div id="rail" role="progressbar" aria-label="読書位置"
+         aria-valuemin="1" aria-valuemax="1" aria-valuenow="1">
+      <div id="rail-fill"></div>
+    </div>
+
+- **`#rail` is a sibling of `#viewport` and after it.** That order is load
+  bearing: the stylesheet tells vertical writing apart with
+  `#viewport.vertical ~ #rail` and flips the fill's origin to the right in that
+  mode. Moving `#rail` before `#viewport` breaks vertical pages only.
+- **The reader writes the numbers**, in `updateRail()`, which
+  `updatePageInfo()` calls: `aria-valuemin`, `aria-valuemax`,
+  `aria-valuenow`, and `--progress` as a fraction from 0 to 1.
+- **Vertical pages count pages**: `max = state.pages`, `now = state.page + 1`,
+  `--progress = pages > 1 ? page / (pages - 1) : 0`.
+- **Horizontal pages have no pages at all** - `paginate()` leaves
+  `state.pages` at 1 - so they report how far the text has scrolled instead:
+  `min = 0`, `max = 100`, `now = percent`, `--progress = percent / 100`.
+  This is the one extension to agent-visual's version, which described the
+  vertical case only; their stylesheet reads `--progress` and nothing else, so
+  it is invisible to them.
+- **No book open** is the guard case: `--progress` is 0 and `aria-valuenow`
+  is the minimum.
+- **The style is not here.** `#rail` ships unstyled, so it is invisible and
+  the reader looks exactly as it did until `reader/reader.css` draws
+  `#rail-fill`. That is deliberate: the markup could land before the restyle
+  without either side waiting.
+- **Tap to jump and hold to scrub are gestures**, so they are `reader/js/**`
+  and land after the rail can actually be seen and touched.
+
+## Version numbers: one number for the whole reader
+
+`reader/index.html` is the single place that names a version: every
+`?v=N` in `reader/js/**` and the two references in the page itself - the
+module script and `reader.css` - carry the same N, and the visible `#build`
+stamp says `html rN`.
+
+GitHub Pages serves with `cache-control: max-age=600`, so a stale module is a
+10 minute bug that looks like a broken feature. **A mismatched `?v=` is worse
+than a stale one**: the browser loads the same module twice under two URLs, with
+two copies of its state and a second IndexedDB connection. `tests/reader-page
+.test.js` asserts that every reference carries one number and that the stamp
+agrees.
+
+Consequence for the split: **a change under `reader/**` that alters behaviour
+needs a version bump, and only agent-reader can make it.** agent-visual says so
+in `log-visual.md` when `reader/reader.css` changes appearance and
+agent-reader bumps the number in the next commit. A restyle arriving up to ten
+minutes late is acceptable; a restyle that never arrives is not.
 
 ## Standalone must keep working
 

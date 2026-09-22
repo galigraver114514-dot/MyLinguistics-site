@@ -13,19 +13,19 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=11';
-import { buildChapter } from './text-model.js?v=11';
-import { prepareAndMount } from './render.js?v=11';
-import { SAMPLE_BOOK } from './sample.js?v=11';
-import { createLookup } from './lookup.js?v=11';
-import { createDictionary } from '../../src/dict/index.js?v=11';
-import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=11';
-import { createPainter } from './highlight.js?v=11';
-import { createLibrary } from './library.js?v=11';
-import { openAnnotations } from './annotations.js?v=11';
-import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=11';
-import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=11';
-import { createBookmarks, bookmarkLabel, findBookmark } from './bookmarks.js?v=11';
+import { openEpub } from './epub.js?v=12';
+import { buildChapter } from './text-model.js?v=12';
+import { prepareAndMount } from './render.js?v=12';
+import { SAMPLE_BOOK } from './sample.js?v=12';
+import { createLookup } from './lookup.js?v=12';
+import { createDictionary } from '../../src/dict/index.js?v=12';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=12';
+import { createPainter } from './highlight.js?v=12';
+import { createLibrary } from './library.js?v=12';
+import { openAnnotations } from './annotations.js?v=12';
+import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=12';
+import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=12';
+import { createBookmarks, bookmarkLabel, findBookmark } from './bookmarks.js?v=12';
 
 /**
  * Bumped together with the query strings above.
@@ -91,7 +91,9 @@ const els = {
   selectClear: document.getElementById('select-clear'),
   selectNote: document.getElementById('select-note'),
   noteMarkers: document.getElementById('note-markers'),
-  bookmark: document.getElementById('btn-bookmark')
+  bookmark: document.getElementById('btn-bookmark'),
+  rail: document.getElementById('rail'),
+  railFill: document.getElementById('rail-fill')
 };
 
 const state = {
@@ -392,9 +394,47 @@ function paginate() {
   state.pages = Math.max(1, Math.round(els.viewport.scrollWidth / width));
 }
 
+/**
+ * The reading position, as one fraction plus the ARIA range that describes it.
+ *
+ * agent-visual draws #rail-fill with transform: scaleX(var(--progress)), so the
+ * fraction is the whole contract; where the rail sits and which way it fills
+ * are the stylesheet's business (interface-shell.md 0.4).
+ *
+ * The vertical case counts pages. The horizontal one has no pages at all -
+ * paginate() leaves state.pages at 1 - so it reports how far the text has
+ * scrolled, which is the same thing to a reader and the only thing available.
+ */
+function updateRail() {
+  if (!els.rail) return;
+  let fraction = 0;
+  let min = 1;
+  let max = 1;
+  let now = 1;
+
+  if (state.book && state.settings.mode === 'vertical') {
+    max = state.pages;
+    now = state.page + 1;
+    fraction = state.pages > 1 ? state.page / (state.pages - 1) : 0;
+  } else if (state.book) {
+    const travels = els.viewport.scrollHeight - els.viewport.clientHeight;
+    const percent = travels > 0 ? (els.viewport.scrollTop / travels) * 100 : 100;
+    min = 0;
+    max = 100;
+    now = Math.round(percent);
+    fraction = percent / 100;
+  }
+
+  els.rail.setAttribute('aria-valuemin', String(min));
+  els.rail.setAttribute('aria-valuemax', String(max));
+  els.rail.setAttribute('aria-valuenow', String(now));
+  els.rail.style.setProperty('--progress', String(fraction));
+}
+
 function updatePageInfo() {
   if (!state.book) {
     els.pageInfo.textContent = '- / -';
+    updateRail();
     return;
   }
   if (state.settings.mode === 'vertical') {
@@ -406,6 +446,7 @@ function updatePageInfo() {
   }
   els.prev.disabled = state.settings.mode === 'vertical' ? state.page <= 0 : els.viewport.scrollTop <= 0;
   els.next.disabled = state.settings.mode === 'vertical' ? state.page >= state.pages - 1 : false;
+  updateRail();
   shellEmit('page', els.pageInfo.textContent);
 }
 
