@@ -78,6 +78,40 @@ the board's two columns — river narrow on the left, bucket wide on the right.
 - `designs/verify/` — `run.mjs` and `routes.json` learned to drive the app, so
   the screens that only exist after something has been packed can be seen.
 
+### Continued (same grant, later the same day)
+
+Two commits `71dcea5` and `638c2f6`, still inside grant 1.
+
+**海 › 辞書 was the part of the grant that was left unfinished**, and it is no
+longer the gap it was. `PXk00`'s column is there - the word and who answered,
+the entries, what the book knows about it (the same three-rung meter 海 draws),
+the sentence it was met in, and 池へ入れる / カードにする / 既知にする with the
+entries scrolling behind them. `ob2Y0`'s landing state is there too: 最近引いた語,
+最近の漢字 and 今日の語.
+
+**Five more bugs, four of them older than this grant.**
+
+- `recordLookup` was imported into `entry.js` and **never called**, so
+  `ml.lookupLog` never filled. The rail's trail, 最近引いた語 and 最近の漢字 read
+  that log and were all permanently empty - the boards' lookup history could not
+  appear in any build.
+- `stateKeyOf` read only the encounter record, and a word can have cards without
+  one: every seeded word does. All eighteen showed 候補 while carrying two cards
+  and a schedule. `ladderState()` now reads record, then brick, then cards.
+- 復習's rail was inert and empty - the course list is drawn twice and only 壁's
+  copy had a handler, and opening `#wall/review` directly never rendered it.
+- The 出典 row shared one flex line with the licence, so it wrapped into the
+  middle of the name and the badge. The attribution is a line of its own.
+- `.wb-row-main` was a `<span>` with flex properties and no `display`, so the
+  trail read 「本origin」.
+
+Tooling: one browser context served all routes, so the tenth screenshot was
+taken over the data the first nine left behind - a context per route now. And the
+runner's notice-hide raced the engine's async boot, so the notice came back into
+the shot; it is hidden again immediately before the screenshot.
+
+Routes are 16 now (`sea-dict-word`, `sea-dict-landing`).
+
 ### Deliberately left alone
 
 - **The bucket's chips are buttons, not drag targets.** The board's lede says
@@ -96,12 +130,13 @@ the board's two columns — river narrow on the left, bucket wide on the right.
 
 ### What this grant did not fix
 
-- **海 · 辞書 is still about 40% of its board.** The two boards for it (`PXk00`,
-  `ob2Y0`) draw an entry head above the dictionary blocks, 関連 chips, the
-  `この語の状態` card with its meter and 次回, 例文, and an action bar of
-  `池へ入れる / カードにする / 既知にする / ⋯`; the scope currently has the search,
-  the trail, the per-dictionary blocks and the right rail's three cards. The
-  kanji detail card and `今日の語` on `ob2Y0` are further still.
+- **海 · 辞書 is missing its kanji detail card.** `ob2Y0` draws 音読み / 訓読み /
+  画数 / 部首 / 漢検, the 熟語 chips, and この漢字を使う語. Nothing in the build has
+  that data - JMdict carries glosses, not character metadata - so the card is not
+  drawn rather than drawn with blanks. Everything else on those two boards is in:
+  see "Continued" above.
+- 関連 chips on `PXk00` are the same kind of gap: the board's related words came
+  from the same character data.
 - `ホーム` and `読書` have no boards, and `index.html` is still a marketing hero.
 - The 川 mask axis and the night-mode highlight alphas in `reader/reader.css`
   still want eyes on a rendered page.
@@ -120,5 +155,6 @@ the board's two columns — river narrow on the left, bucket wide on the right.
 there (`catch:auto:30` → `toPool` → `click:#wbPoolBuild` → …) because 壁, the two
 sheets and the drill only exist once something has been caught and packed.
 
-Entry point: commits `795b88b` (the bucket, the geometry, 海) and `9ad10e9`
-(復習 and ブリック総覧). Tests: 376/376. Board rules: 0. Routes: 14/14.
+Entry point: commits `795b88b` (the bucket, the geometry, 海), `9ad10e9`
+(復習 and ブリック総覧), `71dcea5` (the 辞書 column and three bugs) and `638c2f6`
+(the 辞書 landing and two more). Tests: 376/376. Board rules: 0. Routes: 16/16.

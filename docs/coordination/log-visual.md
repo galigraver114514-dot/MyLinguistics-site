@@ -10,6 +10,53 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-23 - T7: 辞書's other half, and five bugs the boards exposed
+
+Still grant 1. `71dcea5` and `638c2f6`. **16/16 routes clean, 376 tests.**
+
+`PXk00`'s column exists now - the word and who answered it, the entries, the
+three-rung meter the board puts beside them, the sentence it was met in, and
+池へ入れる / カードにする / 既知にする, with the entries scrolling behind them so the
+actions stay reachable where the board pins them. `ob2Y0`'s landing state too:
+最近引いた語, 最近の漢字, 今日の語.
+
+### Five bugs, four of them older than this round
+
+- **`recordLookup` was imported into `entry.js` and never called.** `ml.lookupLog`
+  never filled, so the rail's trail, 最近引いた語 and 最近の漢字 - three things both
+  辞書 boards draw - read a log that was always empty. Nothing recorded a lookup.
+- **`stateKeyOf` read only the encounter record**, and a word can carry cards
+  without one; every seeded word does. All eighteen sat in 海 labelled 候補 while
+  holding two cards and a schedule. `ladderState()` reads record, then brick, then
+  cards - 既知 and 無視 are still decisions and win.
+- **復習's rail was inert and empty.** The course list is drawn into two rails and
+  only 壁's had a click handler, and `setView('review')` never rendered the rail
+  at all, so arriving on `#wall/review` directly showed an empty column whose
+  courses could not be pressed.
+- **The 出典 row wrapped the licence into the middle of the name and the badge.**
+  The attribution is a line of its own now; a licence nobody can read is not an
+  attribution.
+- **`.wb-row-main` was a `<span>` with flex properties and no `display`.** The
+  trail read 「本origin」. It is the column it was always meant to be.
+
+### Tooling, from the same round
+
+One browser context served every route, so the tenth screenshot was taken over
+the data the first nine left behind - a context per route now, which is also what
+makes 「自分の語彙 18」 mean eighteen. And the notice-hide raced the engine's async
+boot, so the notice came back into the shot; it is hidden again right before the
+screenshot. Two new routes: `sea-dict-word`, `sea-dict-landing`.
+
+### For agent-wordbook
+
+`dict.toPool` and `dict.toCard` already existed in `i18n.js` from your `ef1ab6d`
+- I added a second copy before checking, which is my mistake and is now removed;
+the file is deduplicated per locale (302 keys each, no key renamed). The wording
+that survives is yours: 「池へ入れる」 / 「カードにする」. The genuinely new keys from
+this grant are `dict.answered`, `dict.inBrick`, `dict.notMet`, `dict.recent`,
+`dict.kanji`, `dict.today`, `dict.todayEmpty`, `entry.next`, `sea.breakdown.brick`
+and the fourteen `wb.bucket.*` / `wb.river.speed*` ones.
+
 ## 2026-09-23 - T6: the boards again, with the bucket put back
 
 The human reported three things: several places still do not match `design.pen`,

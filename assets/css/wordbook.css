@@ -568,12 +568,16 @@
  * rail, so the definition gives way rather than the row growing - a list that
  * wraps to three lines per entry is not a list. */
 .wb-row-main {
+  /* A row is a word and, where there is one, the gloss under it - a column. As
+   * an inline span the two ran together and the trail read 「本origin」. */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
+.wb-row-main > * { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .wb-row-meta { margin-left: auto; color: var(--muted); font-size: var(--text-footnote); }
 .wb-card-row { display: flex; align-items: center; gap: var(--space-3); }
 
@@ -707,6 +711,11 @@
 }
 .wb-source-main { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; font-weight: 600; }
 .wb-source-credit { margin-left: auto; text-align: right; }
+/* The attribution is a whole line of its own: sharing the row with the name,
+ * the language badge and the entry count wrapped it into the middle of them,
+ * and a licence that cannot be read is not an attribution. */
+.wb-source-row { flex-wrap: wrap; }
+.wb-source-credit { flex: 1 0 100%; margin-left: 0; text-align: left; color: var(--muted-2); font-size: var(--text-caption); }
 
 /* ------------------------------------------------------------------- 川 · 桶
  * The board (zAWvX) draws the river narrow and the bucket wide, which is the
@@ -965,3 +974,42 @@
   cursor: pointer;
 }
 .wb-link.is-quiet { color: var(--muted); font-weight: 400; }
+
+/* 海 › 辞書's entry panel (PXk00): the word and who answered, then the entries,
+ * then what the book knows, then the sentence, then what can be done. */
+.wb-dict-term { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 0.5px solid var(--separator); }
+.wb-dict-term .wb-chips { margin-left: auto; }
+.wb-dict-answered { color: var(--muted); font-size: var(--text-footnote); white-space: nowrap; }
+#wbDict > .wb-sub { border-top: 0; }
+/* 辞書's column is a panel with a scrolling middle: the entries are the only
+ * part that can be any length, and the three actions have to stay reachable
+ * under them - the board pins them to the bottom of the column. */
+#wbDict { height: 100%; min-height: 0; }
+#wbDict .wb-dict-blocks { flex: 1 1 auto; min-height: 96px; overflow: auto; }
+.wb-source-row .btn { margin-left: auto; }
+
+/* 辞書's landing state (ob2Y0): recently looked up, the characters that came
+ * with them, and one word worth meeting. */
+.wb-dict-landing { display: flex; flex-direction: column; gap: var(--space-3); }
+.wb-chip-link { border: 0; font: inherit; font-size: var(--text-caption); font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.wb-chip-link:hover { background: var(--surface); color: var(--tint); }
+.wb-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--pos, var(--muted-2)); }
+.wb-kanji-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.wb-kanji {
+  width: 46px;
+  height: 46px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-title);
+  font-weight: 600;
+  cursor: pointer;
+}
+.wb-kanji:hover { background: color-mix(in srgb, var(--tint) var(--depth-none), transparent); color: var(--tint); }
+.wb-today { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); background: var(--surface-2); border-radius: var(--radius); }
+.wb-today-head { display: flex; align-items: center; gap: var(--space-2); }
+.wb-today-head strong { font-size: var(--text-headline); }
+.wb-today-head .btn { margin-left: auto; border-radius: var(--radius); }
+.wb-today p { margin: 0; }

@@ -1139,9 +1139,28 @@ function monogram(wordKey) {
   return '<span class="wb-monogram" data-pos="' + esc(groupOf(pos)) + '" aria-hidden="true">' + esc(pos.charAt(0)) + '</span>';
 }
 
-function stateKeyOf(wordKey) {
+/* What the ladder says about a word. The encounter record is the engine's own
+ * answer, but a word can have cards without ever having been caught - every
+ * seeded word does - and reading only the record put 候補 beside words that
+ * already carry two cards and a schedule. The record still wins where it
+ * exists: 既知 and 無視 are decisions, not inferences. */
+function ladderState(wordKey) {
   var record = state.encounterByKey[wordKey];
-  return STATE_KEY[record ? record.state : 'new'] || STATE_KEY.new;
+  if (record && record.state === 'dismissed') return 'dismissed';
+  if (record && record.state === 'known') return 'known';
+  if (brickOf(wordKey)) return 'bricked';
+  var word = state.wordByLemma[wordKey];
+  if (word) {
+    var sids = word.senseIds || [];
+    for (var i = 0; i < sids.length; i += 1) {
+      if ((state.cardsBySense[sids[i]] || []).length) return 'carded';
+    }
+  }
+  return 'new';
+}
+
+function stateKeyOf(wordKey) {
+  return STATE_KEY[ladderState(wordKey)] || STATE_KEY.new;
 }
 
 function dueLabel(brick) {
@@ -1312,8 +1331,7 @@ async function renderEntry() {
    * tint, ブリック入り in the word's own hue - the one rung that is
    * membership rather than progress. */
   var steps = ['sea.state.candidate', 'sea.state.waiting', 'sea.state.bricked'];
-  var reached = record ? record.state : 'new';
-  var at = { new: 0, inbox: 0, carded: 1, bricked: 2, known: 3, dismissed: 3 }[reached];
+  var at = { new: 0, inbox: 0, carded: 1, bricked: 2, known: 3, dismissed: 3 }[ladderState(key)];
   html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.state')) + '</h3>' +
     '<div class="wb-meters">' +
       steps.map(function (step, index) {
@@ -1398,13 +1416,20 @@ async function renderDict(term) {
   if (!blocks) return;
   var query = (term == null ? (el('wbDictSearch') ? el('wbDictSearch').value : '') : term).trim();
   if (result) show(result, false);
+  show(el('wbDictLanding'), !query);
   if (!query) {
     blocks.innerHTML = '<p class="muted">' + esc(tText('dict.empty')) + '</p>';
+    renderDictEntryPanel('', []);
+    renderDictLanding();
     return;
   }
   var dict = state.dictionary;
+  /* No dictionary answers in this build, but the book may still know the word:
+   * the panel beside the entries is about the book, not about the dictionary, so
+   * it renders either way. Only the entries themselves need a dictionary. */
   if (!dict || typeof dict.lookupGrouped !== 'function') {
     blocks.innerHTML = '<p class="muted">' + esc(tText('wb.dict.unavailable')) + '</p>';
+    renderDictEntryPanel(query, []);
     return;
   }
   blocks.innerHTML = '<p class="muted">' + esc(tText('dict.searching')) + '</p>';
@@ -1413,6 +1438,7 @@ async function renderDict(term) {
   var shown = visibleGroups(groups, hiddenFrom(readHidden()));
   if (!shown.length) {
     blocks.innerHTML = '<p class="muted">' + esc(tText('wb.empty.browse')) + '</p>';
+    renderDictEntryPanel(query, []);
     return;
   }
   blocks.innerHTML = shown.map(function (group) {
@@ -1438,8 +1464,168 @@ async function renderDict(term) {
       '<p class="muted small">' + esc(creditLine(group)) + '</p></section>';
   }).join('');
   state.dictGroups = shown;
+  /* The trail is what makes 辞書 a history rather than a lookup box, and nothing
+   * was writing to it: 最近引いた語, 最近の漢字 and the rail's list were all
+   * reading a log that never filled. Looking a word up again moves it to the top
+   * instead of adding a row, so this is safe on every keystroke-driven lookup. */
+  if (shown.length || state.wordByLemma[query]) {
+    recordLookup({
+      term: query,
+      reading: state.wordByLemma[query] ? state.wordByLemma[query].reading : null,
+      gloss: firstGloss(shown),
+      pos: posOf(query)
+    });
+  }
+  renderDictEntryPanel(query, shown);
   renderDictHistory();
   await renderSources();
+}
+
+/* ob2Y0 - 辞書 before anything has been looked up. The board's landing state is
+ * what the scope can say with no query: the words looked up recently, the
+ * characters that came with them, and one word worth meeting today. */
+function renderDictLanding() {
+  var rows = readLookupLog();
+
+  var recentWrap = el('wbDictRecentWrap');
+  var recent = el('wbDictRecent');
+  if (recentWrap && recent) {
+    var seen = {};
+    var picks = [];
+    rows.forEach(function (row) {
+      var key = String(row.term || '');
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      picks.push(key);
+    });
+    picks = picks.slice(0, 10);
+    show(recentWrap, picks.length > 0);
+    recent.innerHTML = picks.map(function (key) {
+      var pos = posOf(key);
+      return '<button class="wb-chip wb-chip-link" type="button" data-dict-term="' + esc(key) + '">' +
+        (pos ? '<span class="wb-dot" data-pos="' + esc(groupOf(pos)) + '" aria-hidden="true"></span>' : '') +
+        esc(key) + '</button>';
+    }).join('');
+  }
+
+  var kanjiWrap = el('wbDictKanjiWrap');
+  var kanji = el('wbDictKanji');
+  if (kanjiWrap && kanji) {
+    var chars = [];
+    rows.forEach(function (row) {
+      String(row.term || '').split('').forEach(function (ch) {
+        if (/[\u4e00-\u9fff]/.test(ch) && chars.indexOf(ch) < 0) chars.push(ch);
+      });
+    });
+    chars = chars.slice(0, 12);
+    show(kanjiWrap, chars.length > 0);
+    kanji.innerHTML = chars.map(function (ch) {
+      return '<button class="wb-kanji" type="button" data-dict-term="' + esc(ch) + '">' + esc(ch) + '</button>';
+    }).join('');
+  }
+
+  var todayWrap = el('wbDictTodayWrap');
+  var today = el('wbDictToday');
+  if (todayWrap && today) {
+    var pick = todaysWord();
+    show(todayWrap, !!pick);
+    if (pick) {
+      var sense = entrySense(pick);
+      var definition = sense && sense.definition ? (sense.definition.text || '') : '';
+      var pos = posOf(pick);
+      today.innerHTML = '<div class="wb-today-head"><strong>' + esc(pick) + '</strong>' +
+        (pos ? '<span class="wb-chip">' + esc(pos) + '</span>' : '') +
+        '<button class="btn btn-ghost btn-small" type="button" data-dict-pool="' + esc(pick) + '">＋ ' + esc(tText('dict.toPool')) + '</button></div>' +
+        (definition ? '<p class="muted small">' + esc(definition) + '</p>' : '');
+    }
+  }
+}
+
+/* 今日の語 - one word the book has not met yet, rotating daily: the same word is
+ * not offered twice in a day and a different one comes tomorrow. */
+function todaysWord() {
+  var keys = Object.keys(state.wordByLemma);
+  if (!keys.length) return null;
+  var fresh = keys.filter(function (key) { return ladderState(key) === 'new'; });
+  var pool = fresh.length ? fresh : keys;
+  return pool[Math.floor(Date.now() / 86400000) % pool.length];
+}
+
+/* The half of a lookup that is not the definition: what the book already knows
+ * about the word. The board puts the ladder, the brick it is in, and the
+ * sentence it was met in beside the entries, with the three things you can do
+ * with it underneath - a lookup that only shows definitions makes 海 a
+ * dictionary, and 海 is where the words come from. */
+function renderDictEntryPanel(query, shown) {
+  var term = String(query || '').trim();
+  var word = state.wordByLemma[term] || null;
+  var entry = shown.length && shown[0].entries && shown[0].entries.length ? shown[0].entries[0] : null;
+  var headline = entry ? entryHeadline(entry) : null;
+  var headword = word ? word.lemma : (headline ? headline.headword : term);
+
+  var head = el('wbDictTerm');
+  show(head, !!headword);
+  if (head) {
+    el('wbDictHeadword').textContent = headword;
+    el('wbDictReading').textContent = word ? (word.reading || '') : (headline && headline.reading ? headline.reading : '');
+    var chips = '';
+    var pos = posOf(headword);
+    if (pos) chips += '<span class="wb-chip">' + esc(pos) + '</span>';
+    if (entry) {
+      chips += entryChips(entry, entry.senses && entry.senses[0]).map(function (chip) {
+        return '<span class="wb-chip">' + esc(chip.text || tText(chip.key)) + '</span>';
+      }).join('');
+    }
+    el('wbDictChips').innerHTML = chips;
+    el('wbDictCount').textContent = tText('dict.answered', { n: shown.length });
+  }
+
+  var state_ = el('wbDictState');
+  var at = { new: 0, inbox: 0, carded: 1, bricked: 2, known: 3, dismissed: 3 }[headword ? ladderState(headword) : 0];
+  show(state_, !!headword);
+  if (headword) {
+    var steps = ['sea.state.candidate', 'sea.state.waiting', 'sea.state.bricked'];
+    el('wbDictMeters').innerHTML = steps.map(function (step, index) {
+      return '<span class="wb-meter" data-rung="' + index + '" data-on="' + (at != null && index <= at ? '1' : '0') + '"></span>';
+    }).join('');
+    el('wbDictMeterLabels').innerHTML = steps.map(function (step, index) {
+      return '<span class="wb-meter-label" data-on="' + (at != null && index <= at ? '1' : '0') + '">' + esc(tText(step)) + '</span>';
+    }).join('');
+    var brick = word ? brickOf(word.lemma) : null;
+    var schedule = '';
+    if (brick) {
+      var have = (brick.wordKeys || []).filter(function (key) { return state.cardsBySense && Object.keys(state.wordByLemma).length && key; }).length;
+      schedule = tText('dict.inBrick', { name: formatBrickLabel(brick, tText), size: brick.size, have: have }) + ' · ' + dueLabel(brick);
+    } else if (word) {
+      /* A card exists but may never have been graded, so it has no due date of
+       * its own: that is 今すぐ, not "never met" - the book is holding it. */
+      var sense = entrySense(word.lemma);
+      var card = sense ? (state.cardsBySense[sense.id] || [])[0] : null;
+      schedule = card
+        ? tText('entry.next', { when: formatDue(card.srs && card.srs.due ? card.srs.due - Date.now() : 0) })
+        : tText('dict.notMet');
+    } else {
+      schedule = tText('dict.notMet');
+    }
+    el('wbDictSchedule').textContent = schedule;
+  }
+
+  var record = word ? state.encounterByKey[word.lemma] : null;
+  var sense = word ? entrySense(word.lemma) : null;
+  var sentence = '';
+  if (record && record.contexts && record.contexts.length && record.contexts[0].ja) sentence = record.contexts[0].ja;
+  else if (sense && sense.source && sense.source.ja) sentence = sense.source.ja;
+  var example = el('wbDictExample');
+  show(example, !!sentence);
+  if (sentence) el('wbDictExampleText').textContent = sentence;
+
+  show(el('wbDictActions'), !!word);
+  var toPool = el('wbDictToPool');
+  if (toPool) toPool.disabled = !word || at >= 1;
+  var toCard = el('wbDictToCard');
+  if (toCard) toCard.disabled = !word || at >= 1;
+  var known = el('wbDictKnown');
+  if (known) known.disabled = !sense;
 }
 
 function readHidden() {
@@ -1693,7 +1879,10 @@ function setView(view) {
   markCapsule(view);
 
   if (view === 'wall') renderWall();
-  if (view === 'review') renderCard();
+  /* The drill draws 壁's rail too, so it renders the wall as well: opening
+   * #wall/review directly used to leave the rail empty, which is also what made
+   * its courses unpressable. */
+  if (view === 'review') { renderWall(); renderCard(); }
   if (view === 'pool') renderPool();
   if (view === 'words') renderBrowse();
   if (view === 'bricks') renderBricks();
@@ -2025,11 +2214,16 @@ function bind() {
   el('wbWallReviewNow').addEventListener('click', function () {
     grabBrick(state.brick ? state.brick.id : null);
   });
-  el('wbWallList').addEventListener('click', function (event) {
+  /* 壁's rail and 復習's are the same list of courses drawn twice, so they take
+   * the same handler: pressing a course in either takes it to the wall and
+   * opens the drill on it. Binding only 壁's left the drill's own list inert. */
+  function onRailClick(event) {
     var target = event.target;
-    var id = target && target.getAttribute ? target.getAttribute('data-grab') : null;
-    if (id) grabBrick(id);
-  });
+    var row = target && target.closest ? target.closest('[data-grab]') : null;
+    if (row) grabBrick(row.getAttribute('data-grab'));
+  }
+  el('wbWallList').addEventListener('click', onRailClick);
+  el('wbReviewList').addEventListener('click', onRailClick);
   el('wbPoolBuild').addEventListener('click', function () { openPickSheet('auto'); });
   var pickModes = document.querySelectorAll('#wbPickMode [data-pick-mode]');
   for (var m = 0; m < pickModes.length; m += 1) {
@@ -2138,6 +2332,28 @@ function bind() {
   el('wbDictSearch').addEventListener('input', function (event) {
     renderDict(event.target.value);
   });
+  el('wbDictLanding').addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || !target.closest) return;
+    var pool = target.closest('[data-dict-pool]');
+    if (pool) {
+      var term = pool.getAttribute('data-dict-pool');
+      state.lex.addToPool({ wordKey: term }, { dictionary: state.dictionary }).then(function () {
+        return refresh();
+      }).then(function () {
+        return renderPool();
+      }).then(function () {
+        return renderDictLanding();
+      });
+      return;
+    }
+    var chip = target.closest('[data-dict-term]');
+    if (chip) {
+      var key = chip.getAttribute('data-dict-term');
+      if (el('wbDictSearch')) el('wbDictSearch').value = key;
+      renderDict(key);
+    }
+  });
   el('wbDictHistory').addEventListener('click', function (event) {
     var target = event.target;
     var term = target && target.getAttribute ? target.getAttribute('data-dict-term') : null;
@@ -2150,6 +2366,30 @@ function bind() {
     var target = event.target;
     var id = target && target.getAttribute ? target.getAttribute('data-source-toggle') : null;
     if (id) toggleSource(id);
+  });
+  /* The three things a lookup can lead to. 池へ入れる and カードにする are the
+   * pool's own two steps, reached from the word instead of from the pool, so a
+   * definition you did not know you wanted can be kept without leaving 辞書. */
+  el('wbDictToPool').addEventListener('click', async function () {
+    var term = (el('wbDictSearch') ? el('wbDictSearch').value : '').trim();
+    if (!term) return;
+    await state.lex.addToPool({ wordKey: term }, { dictionary: state.dictionary });
+    await refresh();
+    await renderDict();
+    await renderPool();
+  });
+  el('wbDictToCard').addEventListener('click', async function () {
+    var term = (el('wbDictSearch') ? el('wbDictSearch').value : '').trim();
+    if (!term) return;
+    await state.lex.approveCandidate(term, { dictionary: state.dictionary });
+    await refresh();
+    await renderDict();
+    await renderPool();
+  });
+  el('wbDictKnown').addEventListener('click', function () {
+    var term = (el('wbDictSearch') ? el('wbDictSearch').value : '').trim();
+    var sense = term ? entrySense(term) : null;
+    if (sense) markKnown(sense.id);
   });
   el('wbDictAdd').addEventListener('click', function () {
     /* One import path: the rail's button drives the data sheet's file input, so

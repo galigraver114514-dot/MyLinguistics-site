@@ -313,8 +313,50 @@
           <div class="wb-inbox-list" id="wbBricksList"></div>
         </div>
         <div class="wb-view-block hidden" id="wbDict" data-scope-block="dict">
+          <!-- 海 › 辞書 (PXk00): the word first - what it is, how it is read,
+               which dictionaries answered - then their entries, then what the
+               book already knows about it, then where it was met, then what can
+               be done with it. -->
+          <header class="wb-dict-term hidden" id="wbDictTerm">
+            <h2 class="wb-entry-term" id="wbDictHeadword"></h2>
+            <span class="card-reading" id="wbDictReading"></span>
+            <span class="wb-chips" id="wbDictChips"></span>
+            <span class="wb-dict-answered" id="wbDictCount"></span>
+          </header>
           <p class="muted small hidden" id="wbDictResult"></p>
+          <!-- ob2Y0 - the scope before anything has been looked up: what was
+               looked up recently, which characters came with it, and one word
+               worth meeting today. -->
+          <div class="wb-dict-landing" id="wbDictLanding">
+            <section class="wb-entry-block hidden" id="wbDictRecentWrap">
+              <h3 data-i18n="dict.recent">Recently looked up</h3>
+              <div class="wb-chips" id="wbDictRecent"></div>
+            </section>
+            <section class="wb-entry-block hidden" id="wbDictKanjiWrap">
+              <h3 data-i18n="dict.kanji">Recent characters</h3>
+              <div class="wb-kanji-row" id="wbDictKanji"></div>
+            </section>
+            <section class="wb-entry-block hidden" id="wbDictTodayWrap">
+              <h3 data-i18n="dict.today">Today\'s word</h3>
+              <div class="wb-today" id="wbDictToday"></div>
+            </section>
+          </div>
           <div class="wb-dict-blocks" id="wbDictBlocks"></div>
+          <section class="wb-entry-block hidden" id="wbDictState">
+            <h3 data-i18n="entry.state">State</h3>
+            <div class="wb-meters" id="wbDictMeters"></div>
+            <div class="wb-meter-labels" id="wbDictMeterLabels"></div>
+            <p class="muted small" id="wbDictSchedule"></p>
+          </section>
+          <section class="wb-entry-block hidden" id="wbDictExample">
+            <h3 data-i18n="entry.context">The sentence it came from</h3>
+            <p class="card-example" id="wbDictExampleText"></p>
+          </section>
+          <div class="row-actions hidden" id="wbDictActions">
+            <button class="btn btn-primary btn-small" id="wbDictToPool" type="button" data-i18n="dict.toPool">To the pool</button>
+            <button class="btn btn-ghost btn-small" id="wbDictToCard" type="button" data-i18n="dict.toCard">Make cards</button>
+            <button class="btn btn-ghost btn-small" id="wbDictKnown" type="button" data-i18n="dict.known">Already know it</button>
+          </div>
         </div>
       </div>
       <aside class="wb-rail-right">
