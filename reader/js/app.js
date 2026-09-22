@@ -13,30 +13,40 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=12';
-import { buildChapter } from './text-model.js?v=12';
-import { prepareAndMount } from './render.js?v=12';
-import { SAMPLE_BOOK } from './sample.js?v=12';
-import { createLookup } from './lookup.js?v=12';
-import { createDictionary } from '../../src/dict/index.js?v=12';
-import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=12';
-import { createPainter } from './highlight.js?v=12';
-import { createLibrary } from './library.js?v=12';
-import { openAnnotations } from './annotations.js?v=12';
-import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=12';
-import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=12';
-import { createBookmarks, bookmarkLabel, findBookmark } from './bookmarks.js?v=12';
+import { openEpub } from './epub.js?v=13';
+import { buildChapter } from './text-model.js?v=13';
+import { prepareAndMount } from './render.js?v=13';
+import { SAMPLE_BOOK } from './sample.js?v=13';
+import { createLookup } from './lookup.js?v=13';
+import { createDictionary } from '../../src/dict/index.js?v=13';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=13';
+import { createPainter } from './highlight.js?v=13';
+import { createLibrary } from './library.js?v=13';
+import { openAnnotations } from './annotations.js?v=13';
+import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=13';
+import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=13';
+import { createBookmarks, bookmarkLabel, findBookmark } from './bookmarks.js?v=13';
 
 /**
- * Bumped together with the query strings above.
+ * The version this module was actually fetched under, read back from its own URL.
  *
  * GitHub Pages serves static files with cache-control: max-age=600, so for ten
- * minutes after a deploy a plain reload can still run the previous module. The
- * query strings are what actually defeat that; this constant exists so the
- * running version is visible on screen, which is the only way to tell a stale
- * cache apart from a real bug from a bug report.
+ * minutes after a deploy a plain reload can still run the previous module; the
+ * ?v= query string is what defeats that, and the stamp on screen is the only way
+ * to tell a stale cache apart from a real bug. Reading the number out of
+ * `import.meta.url` is what stops the stamp from claiming a version the browser
+ * never fetched - the constant it used to be drifted to r11 while the assets
+ * moved on, which is precisely the reading the stamp exists to give.
+ *
+ * Under `node --test` the module is imported with no query string, so this is
+ * empty and the stamp keeps the number written in reader/index.html. The version
+ * test compares that number against these same query strings.
  */
-const APP_VERSION = 'js r11';
+const ASSET_VERSION = (function () {
+  const url = typeof import.meta !== 'undefined' && import.meta.url ? import.meta.url : '';
+  const match = /[?&]v=(\d+)/.exec(url);
+  return match ? match[1] : '';
+})();
 
 const SETTINGS_KEY = 'reader.settings.v2';
 const POSITIONS_KEY = 'reader.positions.v2';
@@ -379,7 +389,11 @@ function applyLayout() {
   const vertical = state.settings.mode === 'vertical';
   els.viewport.classList.toggle('vertical', vertical);
   els.viewport.classList.toggle('horizontal', !vertical);
-  document.documentElement.setAttribute('data-theme', state.settings.theme);
+  // The page's paper, not the site's appearance: the shell means light/dark by
+  // data-theme and the reader means paper/white/night by data-page-theme. One
+  // attribute carrying both vocabularies meant the last writer won, which broke
+  // the site's dark mode the moment the reader was embedded in it.
+  document.documentElement.setAttribute('data-page-theme', state.settings.theme);
   document.documentElement.style.setProperty('--reader-size', state.settings.fontSize + 'px');
   invalidateRects();
   scheduleRepaint();
@@ -938,7 +952,7 @@ function buildSettings(body) {
 
   const note = document.createElement('p');
   note.style.fontSize = '0.8rem';
-  note.style.color = 'var(--muted)';
+  note.style.color = 'var(--page-muted)';
   note.textContent = '現在: ' + state.settings.fontSize + 'px';
   body.appendChild(note);
 }
@@ -1146,6 +1160,45 @@ function entryCard(entry) {
   return card;
 }
 
+/* How much of each block to draw. Eight is what one dictionary gets, which
+ * is what the panel has always shown. Two dictionaries split it, because the
+ * second is the reason the reader imported it: three entries of a monolingual
+ * definition is already a screen of Japanese. */
+const MAX_CARDS = 8;
+const MAX_CARDS_PER_SOURCE = 3;
+
+/** The label above one dictionary's block: its own name, its kind, its credit. */
+function sourceHeading(group) {
+  const heading = document.createElement('div');
+  heading.className = 'dict-source';
+
+  const name = document.createElement('strong');
+  // The dictionary's own title, never a translated stand-in: someone who
+  // imported 明鏡国語辞典 has to see that name to know who answered.
+  name.textContent = group.title || group.id || '';
+  heading.appendChild(name);
+
+  const languages = Array.isArray(group.languages) ? group.languages : [];
+  if (languages.length > 0) {
+    const kind = document.createElement('span');
+    kind.className = 'dict-source-kind';
+    kind.textContent = languages.indexOf('ja') !== -1 ? '国語' : '和英';
+    heading.appendChild(kind);
+  }
+
+  // JMdict is CC BY-SA, which asks for attribution wherever its data is shown.
+  // The reader has never rendered it; the dictionary module has carried it in
+  // SourceInfo all along, so a grouped panel is where it finally appears.
+  if (group.attribution) {
+    const credit = document.createElement('span');
+    credit.className = 'dict-source-credit';
+    credit.textContent = group.attribution;
+    heading.appendChild(credit);
+  }
+
+  return heading;
+}
+
 function renderDict(view) {
   if (!view) return;
   els.dictSurface.textContent = view.surface;
@@ -1188,8 +1241,24 @@ function renderDict(view) {
     return;
   }
 
-  const limit = Math.min(view.entries.length, 8);
-  for (let i = 0; i < limit; i++) body.appendChild(entryCard(view.entries[i]));
+  const groups = (Array.isArray(view.groups) ? view.groups : [])
+    .filter(function (group) { return group && Array.isArray(group.entries) && group.entries.length > 0; });
+
+  // One dictionary is one list; the source line on each card already says which
+  // one it is and a heading over a single block is noise. Two dictionaries get
+  // headings, because the whole point of importing 明鏡 is to read it before
+  // the English gloss - and a flat list of eight would spend the entire budget
+  // on whichever the module happened to load first.
+  if (groups.length > 1) {
+    for (let g = 0; g < groups.length; g++) {
+      body.appendChild(sourceHeading(groups[g]));
+      const perSource = Math.min(groups[g].entries.length, MAX_CARDS_PER_SOURCE);
+      for (let i = 0; i < perSource; i++) body.appendChild(entryCard(groups[g].entries[i]));
+    }
+  } else {
+    const limit = Math.min(view.entries.length, MAX_CARDS);
+    for (let i = 0; i < limit; i++) body.appendChild(entryCard(view.entries[i]));
+  }
   els.dict.hidden = false;
 }
 
@@ -2204,7 +2273,10 @@ function shellPresent() {
   if (typeof document === 'undefined') return false;
   if (document.documentElement.getAttribute('data-shell') === 'on') return true;
   if (document.body && document.body.classList.contains('has-shell')) return true;
-  return !!document.querySelector('.tabbar, .navbar');
+  // The id is kept for the old markup, the capsule is what every page carries
+  // now. A selector for .tabbar matches a class, so an id named #tabbar would
+  // never have been found by it - hence both.
+  return !!document.querySelector('.tabbar, .navbar, .capsule, #tabbar');
 }
 
 function syncEmbed() {
@@ -2236,21 +2308,38 @@ applyLayout();
 updatePageInfo();
 
 // The shell owns the bars and the safe areas when it is present. Its script may
-// run after this one, so check now, again on DOMContentLoaded, and watch for the
-// class being added later. Toggling to the same value does not mutate the class
-// attribute, so the observer cannot loop.
+// run after this one, so check now, again on DOMContentLoaded, and watch for both
+// signals arriving late: the class it adds, and the markup it mounts. Watching
+// only the class meant a capsule inserted after this module ran was never seen,
+// and that is the signal the new pages carry. Toggling to the same value does
+// not mutate the class attribute, so the observer cannot loop.
 syncEmbed();
 if (typeof document !== 'undefined') {
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncEmbed);
   const Observer = (typeof window !== 'undefined' && window.MutationObserver)
     || (typeof MutationObserver === 'function' ? MutationObserver : null);
   if (Observer && document.body) {
-    new Observer(syncEmbed).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    new Observer(syncEmbed).observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class'],
+      childList: true
+    });
   }
 }
 
 const buildEl = document.getElementById('build');
-if (buildEl) buildEl.textContent = 'html r11 · ' + APP_VERSION;
+if (buildEl) {
+  // The number this module was fetched under; a bare import - the test runner -
+  // carries no query string, and then the page's own stamp is the only other
+  // source. Either way the stamp states both revisions, because telling a stale
+  // cache from a real bug is the whole reason it is on screen.
+  const onPage = (function () {
+    const match = /r(\d+)/.exec(buildEl.textContent || '');
+    return match ? match[1] : '';
+  })();
+  const shown = ASSET_VERSION || onPage;
+  if (shown) buildEl.textContent = 'html r' + shown + ' · js r' + shown;
+}
 
 // If the previous run never reached "done", its last stage is still in storage.
 // Say so, instead of leaving the next run to reproduce the same freeze blind.

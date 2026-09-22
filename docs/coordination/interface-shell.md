@@ -47,17 +47,29 @@ No cooperation is required. `shellPresent()` is true if any of these hold:
 - `document.documentElement.dataset.shell === 'on'`, kept for a future
   explicit opt-in;
 - `document.body.classList.contains('has-shell')`, which is what shell.js adds;
-- `document.querySelector('.tabbar, .navbar')` exists, which covers the static
-  markup.
+- the shell's own markup is present:
+  `document.querySelector('.tabbar, .navbar, .capsule, #tabbar')`.
 
 Their `markShell()` sets both `data-shell="on"` and `body.has-shell` before
 any other work, which is exactly what the reader listens for.
 
 The reader checks at startup, again on `DOMContentLoaded`, and then watches
-`body`'s class with a `MutationObserver`, because the two scripts race and
-shell.js adds `has-shell` on its own schedule. When any signal is true the
-reader adds `body.shell-embedded`, which hides `#bar` and `#foot` and
-zeroes the top and side padding. Removing the signal restores standalone.
+`body` with a `MutationObserver` for **both** late signals: the `class`
+attribute (shell.js adds `has-shell` on its own schedule) and `childList`
+(the navigation markup can be mounted after this module has run). Watching only
+the class was a real break, not a theory: the capsule became the markup every
+page carries, and a capsule mounted after startup was never seen.
+
+The markup selector lists four names on purpose. `.tabbar` and `.navbar`
+matched the classes the old static bars carried; `.capsule` is the class
+every page carries now; `#tabbar` is there because the pages keep that **id**,
+and a class selector never matches an id. This is the one place the reader
+depends on the shell's markup names, so it is deliberately the most permissive
+selector in the file - it can only add detections, never remove one.
+
+When any signal is true the reader adds `body.shell-embedded`, which hides
+`#bar` and `#foot` and zeroes the top and side padding. Removing the signal
+restores standalone.
 
 ## z scale: the reader now sits inside the shell's
 
@@ -187,6 +199,15 @@ than a stale one**: the browser loads the same module twice under two URLs, with
 two copies of its state and a second IndexedDB connection. `tests/reader-page
 .test.js` asserts that every reference carries one number and that the stamp
 agrees.
+
+The visible stamp is rewritten at runtime from the same number:
+`#build` shows `html rN · js rN`, and N comes out of `import.meta.url`
+rather than a second constant, because a second constant is a second thing to
+forget. It had already been forgotten once - the assets were at v13 while the
+stamp still said r11, which is exactly the reading the stamp exists to give.
+Under `node --test` the import carries no query string, so the stamp falls
+back to the number written in `reader/index.html`, and the version test ties
+that number to the query strings.
 
 Consequence for the split: **a change under `reader/**` that alters behaviour
 needs a version bump, and only agent-reader can make it.** agent-visual says so

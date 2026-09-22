@@ -21,7 +21,7 @@
  *   occasionally picked; stepping to the previous or next word is one tap rather
  *   than a careful re-aim, which is what makes the mistake cheap.
  */
-import { segment, tokenAt, isContent, splitSentences } from '../../src/dict/tokenize.js?v=12';
+import { segment, tokenAt, isContent, splitSentences } from '../../src/dict/tokenize.js?v=13';
 
 const MAX_HISTORY = 50;
 
@@ -136,15 +136,99 @@ export function createLookup(options = {}) {
     return indexes[indexes.length - 1];
   }
 
-  async function look(surface, token, reason) {
-    let entries = [];
-    if (dictionary && typeof dictionary.lookup === 'function') {
+  /** SourceInfo for an id, when the dictionary can describe its sources. */
+  function describe(id) {
+    if (dictionary && typeof dictionary.sources === 'function') {
       try {
-        entries = await dictionary.lookup(surface);
+        const list = dictionary.sources();
+        for (let i = 0; i < list.length; i++) {
+          if (list[i] && list[i].id === id) return list[i];
+        }
       } catch (error) {
-        entries = [];
+        // A dictionary that cannot describe itself still answers lookups.
       }
     }
+    return { id: id, title: id };
+  }
+
+  /**
+   * Group a flat entry list by source, keeping the order the dictionary gave.
+   *
+   * The fallback path, for a dictionary object that predates interface-dict.md
+   * 1.7. It exists so the reader runs against either, and it deliberately does
+   * not reorder: with no per-source language there is nothing to order by but
+   * the dictionary's own preference.
+   */
+  function groupFlat(entries) {
+    const bySource = new Map();
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const id = entry && entry.source ? entry.source : '';
+      if (!bySource.has(id)) {
+        bySource.set(id, Object.assign({}, describe(id), { entries: [] }));
+      }
+      bySource.get(id).entries.push(entry);
+    }
+    return Array.from(bySource.values());
+  }
+
+  /**
+   * The hits for a surface, grouped by source and in reading order.
+   *
+   * The ordering policy lives in the dictionary module (interface-dict.md 1.7):
+   * a dictionary whose definitions are in Japanese comes first, because it
+   * answers the question instead of glossing it. The reader's job is to carry
+   * that grouping through and label it, not to hold a second opinion - two
+   * callers deriving the order separately is how they drift.
+   *
+   * The flat `entries` list stays in the same order as the groups, so a
+   * caller that only wants one list - the hover bubble, the reading in the
+   * panel's header - keeps working unchanged.
+   */
+  async function entriesFor(surface) {
+    if (!dictionary || typeof dictionary.lookup !== 'function') return { groups: [], entries: [] };
+
+    if (typeof dictionary.lookupGrouped === 'function') {
+      try {
+        const groups = await dictionary.lookupGrouped(surface);
+        if (Array.isArray(groups)) {
+          const kept = [];
+          const flat = [];
+          const seen = new Set();
+          for (let g = 0; g < groups.length; g++) {
+            const group = groups[g];
+            const list = group && Array.isArray(group.entries) ? group.entries : [];
+            const fresh = [];
+            for (let i = 0; i < list.length; i++) {
+              const entry = list[i];
+              const key = (entry && entry.source ? entry.source : '') + ':' + (entry ? entry.id : '');
+              if (seen.has(key)) continue;
+              seen.add(key);
+              fresh.push(entry);
+              flat.push(entry);
+            }
+            if (fresh.length > 0) kept.push(Object.assign({}, group, { entries: fresh }));
+          }
+          return { groups: kept, entries: flat };
+        }
+      } catch (error) {
+        // A dictionary that cannot group is still a dictionary; fall through.
+      }
+    }
+
+    let entries = [];
+    try {
+      entries = await dictionary.lookup(surface);
+    } catch (error) {
+      entries = [];
+    }
+    const flat = entries || [];
+    return { groups: groupFlat(flat), entries: flat };
+  }
+
+  async function look(surface, token, reason) {
+    const found = await entriesFor(surface);
+    const entries = found.entries;
     let candidates = [surface];
     if (dictionary && typeof dictionary.candidates === 'function') {
       try {
@@ -157,10 +241,11 @@ export function createLookup(options = {}) {
     return {
       surface: surface,
       token: token || null,
-      entries: entries || [],
+      entries: entries,
+      groups: found.groups,
       candidates: candidates,
       reason: reason || 'word',
-      found: !!(entries && entries.length)
+      found: entries.length > 0
     };
   }
 

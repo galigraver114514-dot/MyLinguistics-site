@@ -10,7 +10,7 @@
  * Saving is best effort. A refused quota costs the offline copy, never the
  * reading session that is already open.
  */
-import { openReaderDb } from './db.js?v=12';
+import { openReaderDb } from './db.js?v=13';
 
 function write(db, stores, work) {
   return new Promise(function (resolve, reject) {

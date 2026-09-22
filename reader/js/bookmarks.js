@@ -9,7 +9,7 @@
  * Machine-local by design: the position store already remembers where reading
  * stopped, and this is the deliberate version of the same idea.
  */
-import { openReaderDb } from './db.js?v=12';
+import { openReaderDb } from './db.js?v=13';
 
 export function bookmarkLabel(text, limit) {
   const value = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
