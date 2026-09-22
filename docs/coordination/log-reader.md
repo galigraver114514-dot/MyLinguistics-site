@@ -2,6 +2,47 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - notes: select, メモ, and a marker that is not a node in the text
+
+A note is an annotation that carries text. It reuses the highlight anchor and
+the same IndexedDB store, so nothing new is persisted except the note itself.
+
+### Why the marker is an overlay and not a span
+
+The design said to wrap the noted range in a `<span>`, and that this is what
+makes a marker clickable, because the Custom Highlight API produces no element.
+That is true, and I deliberately did not do it: wrapping **splits the text nodes
+the offset model is built from**, so every highlight, bookmark and note anchor
+in the chapter would have to be rebuilt or remapped each time a note is added.
+Instead the marker is a fixed-position dot placed from
+`range.getBoundingClientRect()` - left gutter in vertical mode, right in
+horizontal. The cost is a reposition pass, which is frame-aligned and cheap; the
+text model is never mutated, which is the property everything else rests on.
+
+### What a reader can do
+
+- Double tap to select a sentence, again for the paragraph.
+- メモ opens an editor with the selected text quoted above it.
+- It saves 900 ms after typing stops and on blur, so there is no save button to
+  forget, and 削除 removes both the note and its marker.
+- The marker opens that note's editor. Notes get their own highlight colour,
+  distinct from a 蛍光 highlight.
+
+For the iPad specifically: the sheet is lifted by the keyboard height through
+`visualViewport`, because iOS draws the keyboard over a fixed bottom sheet and
+the field would otherwise be underneath it.
+
+### Tests
+
+6 pure tests for the note helpers - is this a note, which notes, where does a
+marker go, clamping, degenerate rects, preview - plus a page test that the
+marker layer exists, starts empty, and that メモ with nothing selected is a
+no-op rather than an empty editor.
+
+The full round trip needs the device: jsdom has no layout, so a double tap
+cannot produce a selection there and a marker position is a geometry result.
+234 of my tests pass. Reader is at `?v=10`.
+
 ## 2026-09-22 - 振り分け: kanji + okurigana + kanji was cut in two
 
 Reported: words like 振り分け come out as two tokens. Three separate causes, all

@@ -13,17 +13,18 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=9';
-import { buildChapter } from './text-model.js?v=9';
-import { prepareAndMount } from './render.js?v=9';
-import { SAMPLE_BOOK } from './sample.js?v=9';
-import { createLookup } from './lookup.js?v=9';
-import { createDictionary } from '../../src/dict/index.js?v=9';
-import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=9';
-import { createPainter } from './highlight.js?v=9';
-import { createLibrary } from './library.js?v=9';
-import { openAnnotations } from './annotations.js?v=9';
-import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=9';
+import { openEpub } from './epub.js?v=10';
+import { buildChapter } from './text-model.js?v=10';
+import { prepareAndMount } from './render.js?v=10';
+import { SAMPLE_BOOK } from './sample.js?v=10';
+import { createLookup } from './lookup.js?v=10';
+import { createDictionary } from '../../src/dict/index.js?v=10';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=10';
+import { createPainter } from './highlight.js?v=10';
+import { createLibrary } from './library.js?v=10';
+import { openAnnotations } from './annotations.js?v=10';
+import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=10';
+import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=10';
 
 /**
  * Bumped together with the query strings above.
@@ -34,7 +35,7 @@ import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selec
  * running version is visible on screen, which is the only way to tell a stale
  * cache apart from a real bug from a bug report.
  */
-const APP_VERSION = 'js r9';
+const APP_VERSION = 'js r10';
 
 const SETTINGS_KEY = 'reader.settings.v2';
 const POSITIONS_KEY = 'reader.positions.v2';
@@ -86,7 +87,9 @@ const els = {
   selectHighlight: document.getElementById('select-highlight'),
   selectCopy: document.getElementById('select-copy'),
   selectDict: document.getElementById('select-dict'),
-  selectClear: document.getElementById('select-clear')
+  selectClear: document.getElementById('select-clear'),
+  selectNote: document.getElementById('select-note'),
+  noteMarkers: document.getElementById('note-markers')
 };
 
 const state = {
@@ -504,6 +507,7 @@ async function showChapter(index, offset) {
     else goToPage(0);
     updatePageInfo();
     repaintHighlights();
+    scheduleMarkers();
   } finally {
     busy(false);
   }
@@ -1318,12 +1322,18 @@ function repaintHighlights() {
   }
 
   const marks = [];
+  const noteMarks = [];
   for (let i = 0; i < state.annotations.length; i++) {
     const annotation = state.annotations[i];
     const range = model.rangeFor(annotation.start, annotation.end);
-    if (range) marks.push(range);
+    if (!range) continue;
+    // A note keeps its own colour, so it is painted twice: once as a highlight
+    // and once as a note. The note highlight has the higher priority and wins.
+    if (isNote(annotation)) noteMarks.push(range);
+    else marks.push(range);
   }
   painter.paint('reader-highlight', marks, { priority: 1 });
+  painter.paint('reader-note', noteMarks, { priority: 2 });
   paintOne('reader-selection', state.selection, 3);
   paintOne('reader-draft', state.draftRange, 2);
   paintOne('reader-hover', state.hoverRange, 2);
@@ -1340,6 +1350,177 @@ function scheduleRepaint() {
   } else {
     repaintHighlights();
   }
+}
+
+/**
+ * Note markers.
+ *
+ * They are overlay elements positioned from each note's range, never nodes
+ * inserted into the text, because inserting one would split the text nodes the
+ * model is built from - and the model is what every other annotation depends
+ * on. Repositioning is a frame-aligned pass, which is what lets a marker follow
+ * a page turn, a font change and a scroll.
+ */
+function renderMarkers() {
+  const layer = els.noteMarkers;
+  if (!layer) return;
+  layer.replaceChildren();
+  if (!state.model) return;
+  const view = els.viewport.getBoundingClientRect();
+  const notes = notesOf(state.annotations);
+  for (let i = 0; i < notes.length; i++) {
+    const note = notes[i];
+    const range = state.model.rangeFor(note.start, note.end);
+    if (!range) continue;
+    const place = markerPlacement(range.getBoundingClientRect(), view, {
+      mode: state.settings.mode,
+      size: 18,
+      pad: 6
+    });
+    if (!place) continue;
+    const marker = document.createElement('button');
+    marker.type = 'button';
+    marker.className = 'note-marker';
+    marker.style.left = place.left + 'px';
+    marker.style.top = place.top + 'px';
+    marker.title = previewNote(note.note, 60);
+    marker.setAttribute('aria-label', 'メモ: ' + previewNote(note.note, 30));
+    marker.addEventListener('click', (function (target) {
+      return function (event) {
+        event.stopPropagation();
+        openNoteEditor({ start: target.start, end: target.end });
+      };
+    })(note));
+    layer.appendChild(marker);
+  }
+}
+
+let markerFrame = 0;
+
+function scheduleMarkers() {
+  if (typeof requestAnimationFrame !== 'function') {
+    renderMarkers();
+    return;
+  }
+  if (markerFrame) return;
+  markerFrame = requestAnimationFrame(function () {
+    markerFrame = 0;
+    renderMarkers();
+  });
+}
+
+async function persistNote(record) {
+  try {
+    const store = await getAnnotationStore();
+    if (store) await store.put(record);
+  } catch (error) {
+    // It is already on screen; only the offline copy is lost.
+  }
+}
+
+async function removeNote(record) {
+  const at = state.annotations.indexOf(record);
+  if (at >= 0) state.annotations.splice(at, 1);
+  repaintHighlights();
+  scheduleMarkers();
+  try {
+    const store = await getAnnotationStore();
+    if (store) await store.remove(record.id);
+  } catch (error) {
+    // Already gone from the screen.
+  }
+}
+
+/**
+ * The note editor. It saves on a pause and on blur, so a note is never lost to
+ * a forgotten button, and iPadOS Scribble writes into the field unchanged.
+ */
+function openNoteEditor(span) {
+  if (!state.book || !state.model || !isRange(span)) return;
+  const text = state.model.slice(span.start, span.end);
+  const existing = findNote(state.annotations, span);
+  const record = existing || {
+    id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    book: state.book.key,
+    chapter: state.index,
+    start: span.start,
+    end: span.end,
+    text: text.slice(0, 120),
+    note: '',
+    color: 'note',
+    createdAt: new Date().toISOString()
+  };
+  let added = !!existing;
+  let area = null;
+  let timer = 0;
+
+  function commit() {
+    if (!area) return;
+    record.note = area.value;
+    record.updatedAt = new Date().toISOString();
+    if (!record.note.trim()) {
+      if (added) removeNote(record);
+      return;
+    }
+    if (!added) {
+      state.annotations.push(record);
+      added = true;
+    }
+    repaintHighlights();
+    scheduleMarkers();
+    persistNote(record);
+  }
+
+  openSheet(existing ? 'メモを編集' : 'メモ', function (body) {
+    const quote = document.createElement('p');
+    quote.className = 'note-quote';
+    quote.textContent = preview(text, 90);
+    body.appendChild(quote);
+
+    area = document.createElement('textarea');
+    area.className = 'note-area';
+    area.rows = 5;
+    area.placeholder = 'この部分について…';
+    area.value = record.note;
+    body.appendChild(area);
+
+    const row = document.createElement('div');
+    row.className = 'row';
+
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.textContent = '保存';
+    save.addEventListener('click', function () {
+      clearTimeout(timer);
+      commit();
+      closeSheet();
+    });
+    row.appendChild(save);
+
+    if (added) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '削除';
+      remove.addEventListener('click', function () {
+        clearTimeout(timer);
+        removeNote(record);
+        closeSheet();
+      });
+      row.appendChild(remove);
+    }
+    body.appendChild(row);
+
+    area.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(commit, 900);
+    });
+    area.addEventListener('blur', function () {
+      clearTimeout(timer);
+      commit();
+    });
+
+    setTimeout(function () { if (area) area.focus(); }, 80);
+  });
 }
 
 async function addAnnotation(span) {
@@ -1676,11 +1857,19 @@ els.selectDict.addEventListener('click', function () {
 
 els.selectClear.addEventListener('click', clearSelection);
 
+els.selectNote.addEventListener('click', function () {
+  const span = state.selection;
+  if (!span) return;
+  openNoteEditor(span);
+  clearSelection();
+});
+
 els.viewport.addEventListener('scroll', function () {
   if (state.settings.mode === 'horizontal') {
     updatePageInfo();
     queueSave();
   }
+  scheduleMarkers();
 }, { passive: true });
 
 els.prev.addEventListener('click', function () { scrollByScreen(-1); });
@@ -1733,7 +1922,20 @@ let resizeTimer = 0;
 window.addEventListener('resize', function () {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(repaginateKeepingPlace, 180);
+  scheduleMarkers();
 });
+
+// iOS puts the keyboard over a fixed sheet. Lifting the sheet by the keyboard
+// height is the difference between typing a note and typing blind.
+if (typeof window !== 'undefined' && window.visualViewport) {
+  const visual = window.visualViewport;
+  const syncKeyboard = function () {
+    const covered = Math.max(0, window.innerHeight - visual.height - visual.offsetTop);
+    els.overlay.style.paddingBottom = covered > 0 ? covered + 'px' : '';
+  };
+  visual.addEventListener('resize', syncKeyboard);
+  visual.addEventListener('scroll', syncKeyboard);
+}
 
 document.addEventListener('keydown', function (event) {
   if (event.key === 'Escape') {
@@ -1843,7 +2045,7 @@ if (typeof document !== 'undefined') {
 }
 
 const buildEl = document.getElementById('build');
-if (buildEl) buildEl.textContent = 'html r9 · ' + APP_VERSION;
+if (buildEl) buildEl.textContent = 'html r10 · ' + APP_VERSION;
 
 // If the previous run never reached "done", its last stage is still in storage.
 // Say so, instead of leaving the next run to reproduce the same freeze blind.

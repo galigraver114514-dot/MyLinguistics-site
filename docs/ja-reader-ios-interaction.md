@@ -275,10 +275,16 @@ Deviations worth knowing:
   sheet, because the finger covers the bubble's own anchor and two taps to read
   one word is one too many.
 - Selection has no drag handles and no native selection mode. Double tap is the
-  only way in; the action bar is 蛍光 / コピー / 辞書 / 解除.
-- Highlights use the Custom Highlight API, so there is no span-wrapping
-  fallback yet, and therefore no clickable note marker. Notes need that marker
-  and are the reason the fallback stays on the list.
+  only way in; the action bar is メモ / 蛍光 / コピー / 辞書 / 解除.
+- Notes exist: select, メモ, type. A note saves on a pause and on blur, so there
+  is no save button to forget, and iPadOS Scribble writes into the field
+  unchanged. The marker is an **overlay** dot placed from the range's bounding
+  box, not a `<span>` wrapped around the text. Wrapping was the plan; it is
+  also the one approach that mutates the text nodes the offset model is built
+  from, so the overlay is the safer shape. The cost is a reposition pass on
+  scroll, which is frame-aligned.
+- Highlights still use the Custom Highlight API with no span-wrapping fallback,
+  but that no longer blocks anything: the note marker comes from the overlay.
 - Generated furigana does not exist, so Pencil hover shows a reading only for
   words the loaded dictionary knows. After a Yomitan import that is most content
   words; before one it is almost none.

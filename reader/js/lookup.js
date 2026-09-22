@@ -21,7 +21,7 @@
  *   occasionally picked; stepping to the previous or next word is one tap rather
  *   than a careful re-aim, which is what makes the mistake cheap.
  */
-import { segment, tokenAt, isContent, splitSentences } from '../../src/dict/tokenize.js?v=9';
+import { segment, tokenAt, isContent, splitSentences } from '../../src/dict/tokenize.js?v=10';
 
 const MAX_HISTORY = 50;
 

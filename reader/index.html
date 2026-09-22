@@ -29,12 +29,14 @@
   </div>
 </main>
 
+<div id="note-markers" aria-hidden="true"></div>
+
 <footer id="foot">
   <button id="btn-prev" type="button" aria-label="前のページ">&lsaquo;</button>
   <span id="page-info">- / -</span>
   <button id="btn-next" type="button" aria-label="次のページ">&rsaquo;</button>
   <span class="spacer"></span>
-  <span id="build" title="読み込まれている版">html r9</span>
+  <span id="build" title="読み込まれている版">html r10</span>
   <button id="btn-smaller" type="button">A&minus;</button>
   <button id="btn-larger" type="button">A&plus;</button>
 </footer>
@@ -60,6 +62,7 @@
 
 <div id="select-bar" hidden>
   <span id="select-info"></span>
+  <button id="select-note" type="button">メモ</button>
   <button id="select-highlight" type="button">蛍光</button>
   <button id="select-copy" type="button">コピー</button>
   <button id="select-dict" type="button">辞書</button>
@@ -79,6 +82,6 @@
 <input type="file" id="file-input" accept=".epub,application/epub+zip" hidden>
 <input type="file" id="dict-input" accept=".zip,application/zip,application/x-zip-compressed" hidden>
 
-<script type="module" src="js/app.js?v=9"></script>
+<script type="module" src="js/app.js?v=10"></script>
 </body>
 </html>

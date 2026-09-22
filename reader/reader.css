@@ -412,3 +412,58 @@ body.shell-embedded #viewport { flex: 1 1 auto; height: 100%; }
 ::highlight(reader-draft) { background-color: rgba(255, 209, 92, 0.30); }
 ::highlight(reader-selection) { background-color: rgba(122, 92, 62, 0.26); }
 ::highlight(reader-hover) { background-color: rgba(122, 92, 62, 0.16); }
+::highlight(reader-note) { background-color: rgba(96, 165, 250, 0.38); }
+
+/* ------------------------------------------------------------------ notes */
+
+/* The marker layer floats over the reading surface. A marker is never inserted
+   into the text, because that would split the text nodes the model is built
+   from - and the model is what every other annotation is anchored to. */
+#note-markers {
+  position: fixed;
+  inset: 0;
+  z-index: 36;
+  pointer-events: none;
+  writing-mode: horizontal-tb;
+}
+.note-marker {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  background: rgba(96, 165, 250, 0.95);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.note-marker:hover { border-color: var(--accent); }
+.note-marker:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.note-quote {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.6;
+  max-height: 6.5em;
+  overflow: auto;
+}
+.note-area {
+  width: 100%;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  resize: vertical;
+  min-height: 6em;
+}
+.note-area:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
