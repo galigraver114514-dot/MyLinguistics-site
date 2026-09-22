@@ -28,6 +28,8 @@ export function brickSequence(brick) {
 
 export function brickLabel(brick, translate) {
   var t = translate || function (key) { return key; };
+  /* A brick the learner named keeps its name; the group is only a default. */
+  if (brick && typeof brick.name === 'string' && brick.name) return brick.name;
   var group = brickGroup(brick);
   var key = brickGroupKey(group);
   var label = key ? t(key) : group.value;

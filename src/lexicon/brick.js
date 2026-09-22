@@ -10,6 +10,26 @@ export const RETIRE_STABILITY = 21;
 export const MAX_AGAIN = 3;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+/* The two kinds the packing sheet offers, expanded to the card modes they
+ * cover. A brick stores the flat list, so the session queue can filter on it
+ * without knowing anything about the sheet. */
+export const MODE_GROUPS = Object.freeze({
+  recognize: ['recognize', 'reading', 'cloze'],
+  produce: ['produce', 'fill']
+});
+
+/* null means "no restriction", which is what an unset brick keeps. */
+export function modesForKinds(kinds) {
+  if (!Array.isArray(kinds) || !kinds.length) return null;
+  var out = [];
+  kinds.forEach(function (kind) {
+    var list = MODE_GROUPS[kind];
+    if (!list) return;
+    list.forEach(function (mode) { if (out.indexOf(mode) < 0) out.push(mode); });
+  });
+  return out.length ? out : null;
+}
+
 export function bandLabel(rank, band) {
   if (!rank) return 'unknown';
   var lo = (band && band.lo) || 12000;
@@ -46,9 +66,38 @@ function byRank(a, b) {
 export function formBricks(entries, options) {
   var opts = options || {};
   var size = opts.size || BRICK_SIZE;
+  var pool = (entries || []);
   var order = ['source', 'band', 'pos'];
-  var remaining = (entries || []).slice();
   var drafts = [];
+
+  /* A hand-picked brick: the learner chose the words, so the packer does not
+   * get to group them. The caller's order is kept, the size cap still applies,
+   * and a selection that matches nothing produces no brick at all rather than
+   * an empty one. */
+  if (Array.isArray(opts.selected) && opts.selected.length) {
+    var picked = [];
+    var taken = {};
+    for (var s = 0; s < opts.selected.length; s += 1) {
+      var want = opts.selected[s];
+      if (taken[want]) continue;
+      taken[want] = true;
+      for (var p = 0; p < pool.length; p += 1) {
+        if (pool[p] && pool[p].wordKey === want) { picked.push(pool[p]); break; }
+      }
+    }
+    if (!picked.length) return [];
+    return [{
+      group: opts.pos ? { kind: 'pos', value: String(opts.pos) } : groupFor(picked[0], opts.band),
+      entries: picked.slice(0, size),
+      partial: picked.length < size,
+      name: opts.name || null,
+      pos: opts.pos || null,
+      modes: Array.isArray(opts.modes) ? opts.modes.slice() : null,
+      firstDueDays: opts.firstDueDays == null ? null : Number(opts.firstDueDays)
+    }];
+  }
+
+  var remaining = pool.slice();
 
   order.forEach(function (kind) {
     var buckets = new Map();

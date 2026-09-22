@@ -712,7 +712,16 @@ export class Lexicon {
       });
     });
 
-    var drafts = formBricks(pool, { size: size, band: this.band, partial: !!opts.partial });
+    var drafts = formBricks(pool, {
+      size: size,
+      band: this.band,
+      partial: !!opts.partial,
+      selected: opts.selection,
+      name: opts.name,
+      pos: opts.pos,
+      modes: opts.modes,
+      firstDueDays: opts.firstDueDays
+    });
     var senses = await this.listSenses();
     var created = [];
     for (var i = 0; i < drafts.length; i += 1) {
@@ -727,14 +736,18 @@ export class Lexicon {
           if (senses[s].wordId === id) senseIds.push(senses[s].id);
         }
       }
+      var firstDueDays = draft.firstDueDays == null ? null : Number(draft.firstDueDays);
       var brick = {
         id: 'brick:' + now.toString(36) + '-' + (bricks.length + created.length + 1),
         group: draft.group,
+        name: draft.name || null,
+        pos: draft.pos || null,
+        modes: draft.modes ? draft.modes.slice() : null,
         wordKeys: wordKeys,
         senseIds: senseIds,
         size: draft.entries.length,
         phase: 'sealed',
-        due: now,
+        due: firstDueDays ? now + firstDueDays * DAY_MS : now,
         createdAt: now,
         sessions: 0,
         partial: !!draft.partial
@@ -785,9 +798,15 @@ export class Lexicon {
       if (!bySense[card.senseId]) bySense[card.senseId] = [];
       bySense[card.senseId].push(card);
     });
+    /* A brick that was packed as recognition only must not serve produce
+     * cards, and vice versa. An unset list means no restriction, which is
+     * what every brick built before the setting existed carries. */
+    var wanted = Array.isArray(brick.modes) && brick.modes.length ? brick.modes : null;
     var queue = [];
     (brick.senseIds || []).forEach(function (sid) {
-      var list = (bySense[sid] || []).slice().sort(function (a, b) {
+      var list = (bySense[sid] || []).filter(function (card) {
+        return !wanted || wanted.indexOf(card.mode) >= 0;
+      }).sort(function (a, b) {
         var ma = MODE_ORDER[a.mode] == null ? 9 : MODE_ORDER[a.mode];
         var mb = MODE_ORDER[b.mode] == null ? 9 : MODE_ORDER[b.mode];
         return ma - mb;
@@ -822,6 +841,36 @@ export class Lexicon {
     brick.sessions = (brick.sessions || 0) + 1;
     brick.lastStudiedAt = now;
     await idb.put(this.db, STORES.bricks, brick);
+    return brick;
+  }
+
+  /* Take one word out of its brick and put it back in the pool. The cards
+   * stay - the word is still in the lexicon, it is just no longer packed -
+   * and a brick emptied this way is removed. */
+  async removeFromBrick(wordKeyValue) {
+    var key = normalizeKey(wordKeyValue);
+    if (!key) return null;
+    var bricks = await this.listBricks();
+    var brick = null;
+    for (var i = 0; i < bricks.length; i += 1) {
+      if ((bricks[i].wordKeys || []).indexOf(key) >= 0) { brick = bricks[i]; break; }
+    }
+    if (!brick) return null;
+    var senses = await this.listSenses();
+    var id = wordId(key);
+    var mine = {};
+    senses.forEach(function (sense) { if (sense.wordId === id) mine[sense.id] = true; });
+    brick.wordKeys = (brick.wordKeys || []).filter(function (k) { return k !== key; });
+    brick.senseIds = (brick.senseIds || []).filter(function (sid) { return !mine[sid]; });
+    brick.size = brick.wordKeys.length;
+    var record = await idb.get(this.db, STORES.encounters, key);
+    if (record) {
+      record.state = 'carded';
+      delete record.brickId;
+      await idb.put(this.db, STORES.encounters, record);
+    }
+    if (!brick.wordKeys.length) await idb.remove(this.db, STORES.bricks, brick.id);
+    else await idb.put(this.db, STORES.bricks, brick);
     return brick;
   }
 
