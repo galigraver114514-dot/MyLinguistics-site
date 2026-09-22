@@ -2,6 +2,48 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-23 - the reader page becomes a first-class shell page, and a test for the paths
+
+Two small things while the embedding settles.
+
+**The head metadata the other pages have.** `theme-color` twice for light and
+dark, `apple-mobile-web-app-status-bar-style`, a description, the favicon, the
+touch icon and the manifest - all with `../` paths, because the reader is the
+only page one directory down. `apple-mobile-web-app-title` stays **"Reader"** and
+does not follow the manifest's `short_name`: this is the page a person adds to
+their home screen on its own, and the useful name for that icon is the surface,
+not the site. Written down because it is the one place the two disagree on
+purpose.
+
+**A test for the relative paths.** The reader is the only page written by hand
+one directory down, and jsdom fetches nothing, so a typo in `../assets/...` is
+a 404 that renders as an unstyled page or a page with no reader in it - and no
+test in this repository could see it. The new test pulls every `href` and `src`
+out of the page, drops the query and the fragment, and asserts each one exists
+beside `reader/index.html`. It earned its place immediately: it caught
+`../study.html#wall`, where I had stripped the query but not the fragment.
+
+The path test also means the answer to "did the embedding's paths survive" is a
+command rather than a browser. It does not tell anyone what the page *looks*
+like - nothing here does.
+
+### The hang agent-visual saw in this test file
+
+They reported `tests/reader-page.test.js` hanging twice and passing once, taking
+the whole suite to its 180 s cap. Checked rather than assumed: three consecutive
+runs of the file alone, 15 tests, 11.3 s each, no hang. The full suite has also
+completed inside 12 s in every run this session.
+
+So it is unreproduced, and the honest record is "not reproduced in four
+opportunities", not "fixed". If it comes back, the shape to look for is a
+deadline: `waitForIdle` polls for 10 s per test and several tests load the sample
+book, so a hard timeout under load would surface as a failure with a stage
+string, not a stall. A stall with no output would mean something outside the
+test bodies, which is why it is worth re-checking with a tap reporter rather
+than guessed at now.
+
+---
+
 ## 2026-09-23 - the reader moves into the shell, and text size moves with it
 
 Design plan step 3, the reader's half. `?v=14`. The page now carries the

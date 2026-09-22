@@ -4,10 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- Deliberately "Reader", not the manifest's short_name: this page is the one
+     a person adds to their home screen on its own, and the useful name for that
+     icon is the surface, not the site. -->
 <meta name="apple-mobile-web-app-title" content="Reader">
 <title>Reader - MyLinguistics</title>
+<meta name="description" content="The reader: Japanese EPUB in vertical or horizontal text, tap a word to look it up, notes, highlights and bookmarks kept on this device.">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+<link rel="manifest" href="../manifest.webmanifest">
 <!-- The site's design tokens, before the reader's own sheet so the reader wins
      where the two define the same name. These are pure custom properties on
      :root, no element styling, so adding them changes only what the reader
