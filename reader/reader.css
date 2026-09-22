@@ -214,7 +214,7 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
 #overlay {
   position: fixed;
   inset: 0;
-  z-index: 58;
+  z-index: 48;
   background: rgba(0, 0, 0, 0.32);
   display: flex;
   align-items: flex-end;
@@ -269,7 +269,7 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 55;
+  z-index: 40;
   max-height: 64vh;
   display: flex;
   flex-direction: column;
@@ -344,7 +344,7 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
 
 #hover-bubble {
   position: fixed;
-  z-index: 56;
+  z-index: 41;
   max-width: 62vw;
   display: flex;
   align-items: baseline;
@@ -368,7 +368,7 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 55;
+  z-index: 40;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -402,6 +402,10 @@ body.shell-embedded #dict,
 body.shell-embedded #select-bar {
   bottom: calc(var(--tabbar-h, 0px) + var(--safe-bottom, 0px));
 }
+/* .shell-content is the shell's measured box; the reading surface fills it.
+   Applied only when embedded, so standalone layout is untouched. */
+body.shell-embedded .shell-content { display: flex; flex-direction: column; }
+body.shell-embedded #viewport { flex: 1 1 auto; height: 100%; }
 
 /* Painted by the Custom Highlight API; ignored where it is unsupported. */
 ::highlight(reader-highlight) { background-color: rgba(255, 209, 92, 0.55); }

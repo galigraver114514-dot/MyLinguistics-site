@@ -1,8 +1,8 @@
 # Interface: the shared shell and the reader
 
-**Version 0.2, updated by agent-reader after reading the real
-`assets/js/shell.js` and `assets/css/shell.css`. Owner: agent-wordbook for
-the shell files, agent-reader for the reader side.**
+**Version 0.3, after their shell commit c02fd13 landed with `markShell()`,
+`wireReader()` and `.shell-content` already built against this contract.
+Owner: agent-wordbook for the shell files, agent-reader for the reader side.**
 
 The reader side is built and tested. This file now describes the boundary as it
 actually is, rather than as proposed.
@@ -10,8 +10,10 @@ actually is, rather than as proposed.
 ## What the shell provides
 
     assets/css/tokens.css    colour, type, spacing, radius, shadow, safe areas
-    assets/css/shell.css     nav bar (z 40), tab bar (z 50), sheet (z 60/61)
-    assets/js/shell.js       static-markup behaviour; window.ML.shell
+    assets/css/shell.css     nav bar and tab bar (z 30), sheet (z 50/51),
+                             .shell-content
+    assets/js/shell.js       static-markup behaviour, `markShell()`,
+                             `wireReader()`; window.ML.shell
 
 The shell owns `body`: its top and side insets, and `padding-bottom` for the
 tab bar, through `body.has-shell`. The reader must not set a `body` padding
@@ -35,6 +37,9 @@ No cooperation is required. `shellPresent()` is true if any of these hold:
 - `document.querySelector('.tabbar, .navbar')` exists, which covers the static
   markup.
 
+Their `markShell()` sets both `data-shell="on"` and `body.has-shell` before
+any other work, which is exactly what the reader listens for.
+
 The reader checks at startup, again on `DOMContentLoaded`, and then watches
 `body`'s class with a `MutationObserver`, because the two scripts race and
 shell.js adds `has-shell` on its own schedule. When any signal is true the
@@ -43,16 +48,21 @@ zeroes the top and side padding. Removing the signal restores standalone.
 
 ## z scale: the reader now sits inside the shell's
 
-    nav bar                    40
-    tab bar                    50
-    reader sheets              55   dictionary panel, selection bar
-    hover bubble               56
-    reader overlay             58   TOC, settings, shelf, dictionary manager
-    shell sheet + backdrop     60/61
+    nav bar                    30
+    tab bar                    30
+    reader sheets              40   dictionary panel, selection bar
+    hover bubble               41
+    reader overlay             48   TOC, settings, shelf, dictionary manager
+    shell sheet + backdrop     50/51
 
-The reader dropped its old 40/45/50. Its two bottom sheets are also offset by
+The reader sits strictly between the bars and the shell's sheet: above the tab
+bar so its panels are usable, below the shell's sheet so a shell modal still
+wins. Its two bottom sheets are also offset by
 `calc(var(--tabbar-h) + var(--safe-bottom))` when embedded, so the tab bar
 stays visible and usable under a definition instead of being buried by it.
+
+The scale moved once already (40/50/60 to 30/30/50/51). The reader's numbers are
+deliberately mid-band so a small change on either side does not collide.
 
 ## Sheets: the reader keeps its own, and why
 
@@ -77,6 +87,11 @@ the reader will hand it one.
 The nav bar is: call `actions()`, render them, call `run(id)`. The reader
 never learns what the bar looks like and the shell never learns what the buttons
 do.
+
+Their `wireReader()` consumes exactly this: it renders `actions()` into
+`.navbar-reader-actions`, calls `run(action.id)`, and calls `title()` now
+and on every `on('title')`. Nothing on either side needs to change for that to
+keep working.
 
 ## The one thing the reader needs from the shell side
 
