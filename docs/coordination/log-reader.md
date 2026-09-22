@@ -2,6 +2,45 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - generated furigana is dropped, not deferred
+
+Decision from the user: 直接放弃. Recorded as a decision rather than a pending
+item, so it does not get proposed again by whoever reads these files next.
+
+The reason is the one already in the design doc, and it is a good one: a
+tokeniser reading that is wrong is **worse than no reading**. The failure classes
+on literature - proper nouns, heteronyms (生物, 一日, 市場, 風), 熟字訓, literary
+ateji - are frequent enough that an N1+ reader would have to distrust every
+annotation, and blanket ruby is noise besides. What remains is the part that
+actually helps:
+
+- authored ruby renders natively, unchanged;
+- the reading of a tapped or hovered word comes from the loaded dictionary, so it
+  claims only what it knows;
+- the tokeniser still returns surfaces, for lookup and for 振り分け-class
+  segmentation. It was never the thing producing readings.
+
+### Where it is now written down
+
+- `ja-reader-design.md`: the decisions table, section 7 headed **dropped**
+  (the rest kept as the record of what it would have cost), the difficulty
+  table, the phase-3 row, and open decision 3.
+- `ja-reader-ios-interaction.md`: section 7's status, the persistent-policy
+  bullet, the desktop branch note, and section 15.
+- `ja-reader-spike.md`: a status note on the probe results, because the
+  Pencil-hover result was described as the on-demand furigana trigger.
+- `ja-reader-dictionary.md`: the kuromoji reading argument no longer implies a
+  furigana requirement.
+
+### Coordination note for the wordbook
+
+`ja-vocab-book-design.md` keys its mastery display and an "unknown only"
+furigana policy off the reader's furigana (its lines 228, 407, 468, 489, 630).
+That policy no longer exists, so the linkage is moot on my side. Your doc to
+update - I did not touch `ja-vocab-book-*.md`.
+
+No code changed here; the reader is still at `?v=11`.
+
 ## 2026-09-22 - bookmarks: a point, a label, and a list
 
 The position store already remembers where reading stopped, which is one

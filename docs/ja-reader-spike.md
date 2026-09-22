@@ -8,6 +8,11 @@ The probe page lives at `spike.html` and is served at
 > rewritten so the fixtures are not carried in the public repository. Everything
 > below is the record of what the probes measured; the numbers are the point,
 > not the page.
+>
+> **Generated furigana was dropped on 2026-09-22** (see @@ja-reader-design.md@@
+> section 7), so the reading and ruby results below are the record of a road not
+> taken. The caret, tap-target and render-cost numbers still hold, because
+> tap-to-look-up and authored ruby depend on them.
 
 ## How to run it
 

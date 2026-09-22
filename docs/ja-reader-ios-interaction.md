@@ -123,15 +123,19 @@ turns.
 
 ## 7. Furigana on an iPad
 
-There is no hover on a touch device, so the on-demand policy needs a different
+**Status: generated furigana is dropped** (see `ja-reader-design.md` section
+7). Authored ruby renders natively and the reading of a word is shown by Pencil
+hover or tap from the loaded dictionary. Everything below about persistent
+policies is void, because there is no generated ruby to apply them to.
+
+There is no hover on a touch device, so the on-demand reading needs a different
 trigger than on desktop.
 
 - **Pencil hover** is the ideal trigger where the hardware supports it: the
   reading appears as the Pencil passes over a word, with no touch and no
   commitment.
 - **Tap** also reveals the reading, in the bubble, for every word.
-- **Persistent policies** (off, non-jōyō only, unknown-only, full) remain
-  available as settings, because they are about typography rather than gesture.
+- ~~**Persistent policies**~~ - dropped with generated furigana.
 
 Critical rule: toggling furigana must not move the reading position by even a
 line. Because annotations live in the text model as offsets and ruby is applied
@@ -246,7 +250,7 @@ storage management rather than a cache that might or might not be there.
 ## 14. Desktop as the secondary target
 
 The same code serves desktop, where hover exists and the Pencil does not. The
-only branch is the furigana trigger: hover on desktop, tap or Pencil hover on
+only branch is the reading trigger: hover on desktop, tap or Pencil hover on
 iPad. Everything else is shared. Keyboard shortcuts are worth wiring up on both,
 because the user may attach a Magic Keyboard to the iPad, where they matter as
 much as on a desktop.
@@ -289,6 +293,7 @@ Deviations worth knowing:
   each row carrying the text at that point, its chapter and percent, 開く and
   削除. A bookmark is { chapter, offset }, so it survives a font
   change, a writing mode change and a rotation like every other annotation.
-- Generated furigana does not exist, so Pencil hover shows a reading only for
-  words the loaded dictionary knows. After a Yomitan import that is most content
-  words; before one it is almost none.
+- Generated furigana was **dropped by decision**, so Pencil hover and tap show a
+  reading only for words the loaded dictionary knows: most content words after a
+  Yomitan import, the common subset with the bundled JMdict pack, and nothing
+  without a dictionary. Authored ruby renders natively and is unaffected.

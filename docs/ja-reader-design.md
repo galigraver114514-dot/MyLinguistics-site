@@ -10,7 +10,7 @@ Status: design approved, implementation not started.
 | --- | --- |
 | Primary device | **iPad**, iPadOS **26.6**. Desktop is secondary. |
 | Input format | **EPUB only.** PDF is deferred indefinitely; see section 10. |
-| Furigana | source ruby when present; generated furigana with selectable policies |
+| Furigana | **authored ruby only**. Generated furigana was dropped by decision - see section 7 |
 | Dictionary | bundled JMdict as fallback, **plus local Yomitan import as the primary source** |
 | Dictionary language | **JP-JP (monolingual) required**, not English glosses |
 | Offline | **explicit download-everything mode** with storage management |
@@ -31,7 +31,7 @@ Read Japanese long-form text (novels, essays) inside MyLinguistics, with reading
 aids tuned for a learner above N1 who is working toward native-level reading:
 
 - EPUB (and, later, PDF) import from local files
-- furigana on demand, or filtered rather than blanket
+- authored ruby when the book carries it, plus the reading of a tapped or hovered word from the dictionary; no generated furigana
 - one-click dictionary lookup
 - vertical and horizontal typesetting
 - font size / line height / theme control
@@ -60,7 +60,7 @@ multi-megabyte dictionary blob. jsDelivr does both; GitHub Pages may not.
 | Horizontal reading, font size, theme | Easy | CSS only |
 | Vertical typesetting | Medium | `writing-mode: vertical-rl` is native; pagination and scroll math are fiddly |
 | Source ruby rendering | Easy | native `<ruby>` |
-| Generated furigana | **Hard** | tokenizer readings are wrong often enough to annoy this user |
+| Generated furigana | **Hard — dropped** | tokenizer readings are wrong often enough to annoy this user, so a wrong reading is worse than none |
 | Dictionary data pipeline | **Hard** | 200k entries, static host, no server, memory budget |
 | Click-to-lookup + deinflection | Hard | solved problem, portable rule tables, but real work |
 | Highlights / notes / bookmarks | Medium | CSS Custom Highlight API works, but registration timing is a silent footgun |
@@ -142,7 +142,13 @@ images, and authored ruby.
 
 ## 7. Furigana
 
-Three sources, all supported by the same rendering path.
+**Status: dropped except (a).** Generated furigana was abandoned by decision on
+2026-09-22, not deferred. A tokeniser reading that is wrong is worse than no
+reading - it is the exact failure this reader exists to avoid - and blanket ruby
+is noise to an N1+ reader. What remains is authored ruby rendered natively, and
+the reading of a tapped or hovered word from the loaded dictionary, which claims
+only what it knows. The rest of this section is kept as the record of what was
+considered and what it would have cost.
 
 ### (a) Authored ruby in the source — Easy
 
@@ -150,7 +156,7 @@ Three sources, all supported by the same rendering path.
 run); Aozora-derived EPUBs and many commercial EPUBs carry real `<ruby>`
 markup. Use it as ground truth. Render natively.
 
-### (b) Generated ruby — Hard
+### (b) Generated ruby — Hard, and dropped
 
 Pipeline: tokenise -> read each token -> align kanji runs against the reading ->
 emit ruby.
@@ -176,7 +182,7 @@ texts. Mitigations:
 3. never treat generated ruby as authoritative — always visually distinguishable
    from authored ruby.
 
-### (c) Annotation policy — the highest-value idea here
+### (c) Annotation policy — dropped with (b)
 
 For a reader above N1, blanket furigana is noise and arguably harmful: it trains
 the eye to read the ruby instead of the kanji. Policies worth having:
@@ -344,7 +350,7 @@ vocabulary and SRS pages as they are.
 | --- | --- | --- |
 | 1 | EPUB import, text model, horizontal + vertical, font size, theme, resume position, authored ruby | no dictionary; usable on its own |
 | 2 | JMdict pipeline, click-to-lookup, deinflection, frequency and pitch accent, Yomitan ZIP import | the largest single chunk of work |
-| 3 | Generated furigana, annotation policies, personal correction dictionary, add-to-deck | the differentiating phase |
+| 3 | ~~Generated furigana, annotation policies~~ (dropped), personal correction dictionary, add-to-deck | the differentiating phase, minus furigana |
 | 4 | Highlights, notes, bookmarks, side panel, export/import | mostly UI on a solved foundation |
 | 5 | Bundled 青空文庫 starter library (public domain), offline caching, sync | |
 | 6 | PDF | separate decision; likely defer or skip |
@@ -355,8 +361,9 @@ vocabulary and SRS pages as they are.
    to EPUB? This is the biggest single scope lever.
 2. **Source files.** DRM-free files you own, or DRM-protected purchases? DRM
    would block the whole feature.
-3. **Furigana policy.** On demand, non-jōyō only, unknown-only, or full? I would
-   default to on-demand plus non-jōyō, with unknown-only as the differentiator.
+3. ~~**Furigana policy.**~~ **Decided: dropped.** Authored ruby stays; generated
+   ruby does not. Nothing needs a policy toggle because there is nothing to
+   toggle.
 4. **Dictionary data.** OK to bundle EDRDG data (CC BY-SA, attribution required)
    and import Yomitan ZIPs locally? Do you already own Yomitan dictionaries?
 5. **Devices.** Desktop only, or iPad and iPhone as well? Vertical reading on an

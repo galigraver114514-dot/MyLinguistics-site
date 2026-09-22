@@ -212,8 +212,9 @@ against a CDN copy appeared to hang. Self-hosted:
 Over 20,000 characters, **every one of 12,616 tokens carried both a reading and
 a `basic_form`**, and 1,077 were inflected. That means:
 
-- **furigana generation has readings for every token**, with no gaps to
-  interpolate;
+- **furigana generation would have had a reading for every token**, with no
+  gaps to interpolate - noted, and then dropped on 2026-09-22, see
+  @@ja-reader-design.md@@ section 7;
 - **click-to-look-up can use `basic_form` as the dictionary form** for the
   common case, so the deinflection engine is only needed for arbitrary
   selections and tokeniser failures.
