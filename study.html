@@ -67,7 +67,6 @@
           <h2 class="wb-rail-title" data-i18n="wall.fromSea">Take from the sea</h2>
           <span class="pill" id="wbWallCount">0</span>
         </div>
-        <div class="wb-stats" id="wbStats"></div>
         <div class="wb-rail-list" id="wbWallList"></div>
       </aside>
       <div class="wb-col-main">
@@ -84,17 +83,28 @@
       </div>
     </div>
 
-    <!-- 壁 - the drill. One card per word, four grades, ten cards to a brick. -->
+    <!-- 壁 · 復習 (Kr4lF) - the drill. The course list stays on the left with the
+         four totals above it, the progress strip runs across the top of the
+         card, and the four grades are the largest controls on the page because
+         they are what the thumb is for. -->
     <div class="panel wb-view hidden" id="wbReview">
+      <aside class="wb-rail">
+        <div class="wb-rail-head">
+          <h2 class="wb-rail-title" data-i18n="wall.title">Wall</h2>
+          <span class="pill" id="wbReviewCount">0</span>
+        </div>
+        <div class="wb-stats" id="wbStats"></div>
+        <div class="wb-rail-list" id="wbReviewList"></div>
+      </aside>
       <div class="wb-col-main">
-        <div class="wb-review-top">
+        <div class="wb-review-strip">
+          <div class="wb-progress"><div class="wb-progress-fill" id="wbProgress"></div></div>
           <span class="pill pill-accent" id="wbCounter">0 / 0</span>
           <span class="pill" id="wbModeLabel">-</span>
           <span class="pill pill-accent hidden" id="wbBrickChip"></span>
-          <button class="btn btn-ghost btn-small" id="wbLookOnly" type="button" aria-pressed="false" data-i18n="wb.lookOnly">Look only</button>
           <span class="muted small hidden" id="wbLookNote"></span>
+          <button class="btn btn-ghost btn-small" id="wbLookOnly" type="button" aria-pressed="false" data-i18n="wb.lookOnly">Look only</button>
         </div>
-        <div class="wb-progress"><div class="wb-progress-fill" id="wbProgress"></div></div>
         <div class="wb-card" id="wbCard">
           <p class="wb-term" id="wbPrompt">-</p>
           <p class="card-reading" id="wbReading"></p>
@@ -111,33 +121,71 @@
         </div>
       </div>
       <div class="wb-grades" id="wbGrades">
-        <button class="btn btn-danger" data-rating="1" type="button"><span data-i18n="wb.grade.again">Again</span> <span class="wb-when" data-when="1"></span></button>
-        <button class="btn btn-secondary" data-rating="2" type="button"><span data-i18n="wb.grade.hard">Hard</span> <span class="wb-when" data-when="2"></span></button>
-        <button class="btn btn-primary" data-rating="3" type="button"><span data-i18n="wb.grade.good">Good</span> <span class="wb-when" data-when="3"></span></button>
-        <button class="btn btn-success" data-rating="4" type="button"><span data-i18n="wb.grade.easy">Easy</span> <span class="wb-when" data-when="4"></span></button>
+        <button class="btn btn-danger wb-grade" data-rating="1" type="button"><span data-i18n="wb.grade.again">Again</span> <span class="wb-when" data-when="1"></span></button>
+        <button class="btn btn-secondary wb-grade" data-rating="2" type="button"><span data-i18n="wb.grade.hard">Hard</span> <span class="wb-when" data-when="2"></span></button>
+        <button class="btn btn-primary wb-grade" data-rating="3" type="button"><span data-i18n="wb.grade.good">Good</span> <span class="wb-when" data-when="3"></span></button>
+        <button class="btn btn-success wb-grade" data-rating="4" type="button"><span data-i18n="wb.grade.easy">Easy</span> <span class="wb-when" data-when="4"></span></button>
         <button class="btn btn-primary hidden" id="wbNext" type="button" data-i18n="wb.next">Next</button>
         <button class="btn btn-ghost" id="wbFlip" type="button" data-i18n="wb.flip">Flip</button>
       </div>
     </div>
 
-    <!-- 川 - the river, with the rod and the bucket in the rail. -->
+    <!-- 川 - the river and the bucket, the one stage of the cycle that was
+         missing. The board (zAWvX) draws the river as the narrow left column
+         and the bucket as the wide right one: the river is what you watch, the
+         bucket is what you work with. A caught word lands in the bucket and
+         nothing else happens to it - 池へ is what moves it into the pool, and
+         until then it can go back to the river. -->
     <div class="panel wb-view hidden" id="wbRiver">
-      <div class="wb-col-main">
-        <div class="wb-review-top">
-          <span class="pill" id="wbRiverCount">0</span>
-          <span class="muted small" data-i18n="wb.river.note">Drag the rod; the first word it touches lands in the pool.</span>
-          <button class="btn btn-ghost btn-small" id="wbRiverPause" type="button" data-i18n="wb.river.pause">Pause</button>
-          <button class="btn btn-ghost btn-small" id="wbRiverShuffle" type="button" data-i18n="wb.river.shuffle">New course</button>
-        </div>
+      <div class="wb-col-river">
         <div class="wb-river" id="wbRiverField">
           <canvas class="wb-river-canvas" id="wbRiverCanvas" data-i18n-aria="wb.river.aria" aria-label="The word river. Drag the rod to hook one word."></canvas>
           <div class="wb-river-fallback" id="wbRiverFallback"></div>
           <p class="wb-river-empty hidden" id="wbRiverEmpty" data-i18n="wb.river.empty">The river is empty.</p>
         </div>
       </div>
-      <aside class="wb-rail">
-        <p class="muted small hidden" id="wbRiverCatch"></p>
-      </aside>
+      <div class="wb-col-main">
+        <div class="wb-review-top wb-bucket-actions">
+          <span class="pill" id="wbRiverCount">0</span>
+          <span class="muted small wb-river-hint" data-i18n="wb.river.note">Drag the rod; the first word it touches lands in the bucket.</span>
+          <button class="btn btn-ghost btn-small" id="wbRiverSpeed" type="button" data-i18n="wb.river.speed">Speed</button>
+          <button class="btn btn-ghost btn-small" id="wbRiverPause" type="button" data-i18n="wb.river.pause">Pause</button>
+          <button class="btn btn-primary btn-small" id="wbRiverToPool" type="button" data-i18n="wb.bucket.toPool">To the pool</button>
+          <button class="btn btn-danger btn-small" id="wbRiverCancel" type="button" data-i18n="wb.bucket.cancel">Cancel</button>
+        </div>
+        <section class="wb-bucket">
+          <header class="wb-bucket-head">
+            <span class="wb-bucket-glyph" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 7h16l-1.6 12.2a2 2 0 0 1-2 1.8H7.6a2 2 0 0 1-2-1.8Z"></path>
+                <path d="M8.6 7a3.4 3.4 0 0 1 6.8 0"></path>
+                <path d="M9.5 11v6M14.5 11v6"></path>
+              </svg>
+            </span>
+            <strong class="wb-bucket-count" id="wbBucketCount">0</strong>
+            <span class="wb-bucket-unit" data-i18n="wb.bucket.unit">caught</span>
+            <span class="wb-bucket-stats">
+              <span class="wb-bucket-stat">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3 3 7.5 12 12l9-4.5Z"></path><path d="m3 12.5 9 4.5 9-4.5"></path>
+                </svg>
+                <b id="wbBucketPool">0</b> <span data-i18n="wb.bucket.pool">pool</span>
+              </span>
+              <span class="wb-bucket-sep" aria-hidden="true">·</span>
+              <span class="wb-bucket-stat is-fresh">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M12 3.5 14 10l6.5 2-6.5 2-2 6.5-2-6.5L3.5 12 10 10Z"></path>
+                </svg>
+                <b id="wbBucketNew">0</b> <span data-i18n="wb.bucket.fresh">new</span>
+              </span>
+            </span>
+          </header>
+          <p class="muted small" data-i18n="wb.bucket.lede">Drag words from the river into here. Words in the bucket can go back to the river.</p>
+          <p class="muted small hidden" id="wbRiverCatch"></p>
+          <div class="wb-bucket-surface" id="wbBucketSurface"></div>
+          <p class="wb-bucket-hint" data-i18n="wb.bucket.drop">Drop here</p>
+        </section>
+      </div>
     </div>
 
     <!-- 池 - the packing workshop. Only words waiting for a brick live here. -->
@@ -154,21 +202,9 @@
           <h1 class="wb-title" data-i18n="pool.title">Pool</h1>
         </header>
         <p class="muted small" id="wbPoolLede"></p>
-        <div class="wb-segmented wb-filter" id="wbPoolFilter" role="tablist">
-          <button class="wb-seg is-active" role="tab" data-pool-filter="waiting" aria-selected="true" data-i18n="pool.filter.waiting">Waiting</button>
-          <button class="wb-seg" role="tab" data-pool-filter="candidates" aria-selected="false" data-i18n="pool.filter.candidates">Candidates</button>
-          <button class="wb-seg" role="tab" data-pool-filter="all" aria-selected="false" data-i18n="pool.filter.all">All</button>
-        </div>
-        <div class="wb-review-top">
-          <span class="pill pill-accent" id="wbPoolCount">0</span>
-          <span class="pill" id="wbBrickCount">0</span>
-          <button class="btn btn-primary btn-small" id="wbPoolBuild" type="button" data-i18n="pool.build.title">Build a brick</button>
-          <button class="btn btn-ghost btn-small" id="wbEnrol" type="button" data-i18n="wb.enrol">Enrol and build bricks</button>
-          <button class="btn btn-ghost btn-small" id="wbPoolRefresh" type="button" data-i18n="wb.inbox.refresh">Refresh</button>
-        </div>
         <p class="muted small hidden" id="wbPoolNote"></p>
-        <div class="wb-inbox-list" id="wbPoolList"></div>
-        <div class="wb-inbox-list hidden" id="wbInboxList"></div>
+        <div class="wb-inbox-list wb-pool-list" id="wbPoolList"></div>
+        <div class="wb-inbox-list wb-pool-list hidden" id="wbInboxList"></div>
         <details class="wb-sub">
           <summary data-i18n="wb.mine.title">Mine a word</summary>
           <p class="muted small" data-i18n="wb.mine.note">Everything here is Japanese. The sentence becomes the card context.</p>
@@ -183,6 +219,21 @@
           </div>
           <p class="muted small hidden" id="wbMineResult"></p>
         </details>
+      </div>
+      <!-- 池's own controls sit under the working column, the way 壁's do: the
+           board puts the list straight under the lede, and a filter that keeps
+           the list 110px down the page is not a filter, it is a header. -->
+      <div class="wb-actions-bar wb-pool-bar">
+        <div class="wb-segmented wb-filter" id="wbPoolFilter" role="tablist">
+          <button class="wb-seg is-active" role="tab" data-pool-filter="waiting" aria-selected="true" data-i18n="pool.filter.waiting">Waiting</button>
+          <button class="wb-seg" role="tab" data-pool-filter="candidates" aria-selected="false" data-i18n="pool.filter.candidates">Candidates</button>
+          <button class="wb-seg" role="tab" data-pool-filter="all" aria-selected="false" data-i18n="pool.filter.all">All</button>
+        </div>
+        <span class="pill pill-accent" id="wbPoolCount">0</span>
+        <span class="pill" id="wbBrickCount">0</span>
+        <button class="btn btn-primary btn-small" id="wbPoolBuild" type="button" data-i18n="pool.build.title">Build a brick</button>
+        <button class="btn btn-ghost btn-small" id="wbEnrol" type="button" data-i18n="wb.enrol">Enrol and build bricks</button>
+        <button class="btn btn-ghost btn-small" id="wbPoolRefresh" type="button" data-i18n="wb.inbox.refresh">Refresh</button>
       </div>
       <!-- 池 - the two floating sheets. 選ぶ then 設定, over the pool and never a
            separate screen (designs HnsOq / gLDnX). They live inside the pool
@@ -238,7 +289,19 @@
           <input id="wbDictSearch" type="search" lang="ja" autocomplete="off" data-i18n-placeholder="dict.search" placeholder="Search a word, reading or meaning">
         </div>
         <div class="wb-rail-list" id="wbBrowseBody" data-scope-block="words"></div>
-        <div class="wb-rail-list" id="wbBricksGrid" data-scope-block="bricks" hidden></div>
+        <div class="wb-rail-block" data-scope-block="bricks" hidden>
+          <div class="wb-segmented wb-filter" id="wbBrickFilter" role="tablist">
+            <button class="wb-seg is-active" role="tab" data-brick-filter="all" aria-selected="true" data-i18n="sea.bricks.all">All</button>
+            <button class="wb-seg" role="tab" data-brick-filter="sealed" aria-selected="false" data-i18n="wall.state.sealed">Not started</button>
+            <button class="wb-seg" role="tab" data-brick-filter="learning" aria-selected="false" data-i18n="wall.state.learning">Learning</button>
+            <button class="wb-seg" role="tab" data-brick-filter="review" aria-selected="false" data-i18n="wall.state.review">Reviewing</button>
+            <button class="wb-seg" role="tab" data-brick-filter="retired" aria-selected="false" data-i18n="wall.state.retired">Graduated</button>
+          </div>
+          <p class="muted small" data-i18n="sea.bricks.gridNote">Colour follows the stage</p>
+          <div class="wb-rail-list wb-brick-matrix" id="wbBricksGrid"></div>
+          <h3 class="wb-rail-title" data-i18n="sea.bricks.stages">Stages</h3>
+          <div class="wb-stage-list" id="wbBrickStages"></div>
+        </div>
         <div class="wb-rail-list" id="wbDictHistory" data-scope-block="dict" hidden></div>
       </aside>
       <div class="wb-col-main">
@@ -255,17 +318,38 @@
         </div>
       </div>
       <aside class="wb-rail-right">
+        <!-- The four numbers, titled 自分の語彙 on the 単語 board and 海 on the
+             ブリック and 辞書 ones - the only thing that changes between them.
+             What sits beside them does change: 状態の内訳 and 色の見方 for the
+             words, ブリックの内訳 for the bricks, 品詞の内訳 and 出典 for the
+             dictionary. 出典 follows the dictionaries, not the words. -->
         <div class="wb-card-block">
-          <div class="wb-stats" id="wbSeaStats"></div>
+          <h2 class="wb-rail-title" id="wbSeaCardTitle" data-i18n="sea.stats.mine">My vocabulary</h2>
+          <div class="wb-stat-rows" id="wbSeaStats"></div>
+        </div>
+        <div class="wb-card-block" data-scope-block="words">
+          <h2 class="wb-rail-title" data-i18n="sea.breakdown">By state</h2>
           <div class="wb-breakdown" id="wbSeaBreakdown"></div>
         </div>
-        <div class="wb-card-block">
+        <div class="wb-card-block" data-scope-block="words">
+          <h2 class="wb-rail-title" data-i18n="sea.legend">Reading the colours</h2>
+          <div class="wb-legend" id="wbSeaLegend"></div>
+        </div>
+        <div class="wb-card-block" data-scope-block="bricks">
+          <h2 class="wb-rail-title" data-i18n="sea.breakdown.brick">Bricks by part of speech</h2>
+          <div class="wb-breakdown" id="wbSeaBrickBreakdown"></div>
+        </div>
+        <div class="wb-card-block" data-scope-block="dict">
+          <h2 class="wb-rail-title" data-i18n="sea.posBreakdown">By part of speech</h2>
+          <div class="wb-breakdown" id="wbSeaPosBreakdown"></div>
+        </div>
+        <div class="wb-card-block" data-scope-block="bricks dict">
           <h2 class="wb-rail-title" data-i18n="dict.sources">Sources</h2>
           <div class="wb-source-list" id="wbSourcesList"></div>
           <p class="muted small" data-i18n="dict.order">Shown top to bottom. Hide one with the eye.</p>
           <p class="muted small" id="wbSourceUsage"></p>
         </div>
-        <button class="btn btn-primary" id="wbDictAdd" type="button" data-i18n="dict.add">Add a dictionary</button>
+        <button class="btn btn-primary" id="wbDictAdd" type="button" data-scope-block="bricks dict" data-i18n="dict.add">Add a dictionary</button>
       </aside>
     </div>
 

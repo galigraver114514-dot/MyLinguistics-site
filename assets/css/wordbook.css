@@ -1,32 +1,3 @@
-/* Advanced wordbook page. Reuses the shared site tokens from style.css. */
-
-.wb-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.wb-stat {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  display: grid;
-  gap: 2px;
-}
-
-.wb-stat span {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-}
-
-.wb-stat strong {
-  font-size: 1.25rem;
-  letter-spacing: -0.02em;
-}
 
 .wb-review-top {
   display: flex;
@@ -126,7 +97,6 @@
 }
 
 @media (max-width: 820px) {
-  .wb-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .wb-grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
@@ -310,11 +280,14 @@
 
 /* An app is one screen. The document height was 1470 on 海 because a column
  * grows with its list; on the board every column is a card of a fixed height
- * with the list scrolling inside it, which is also what an iPad app does. */
+ * with the list scrolling inside it, which is also what an iPad app does.
+ * The app's own box is the page under the capsule, so its padding is the
+ * boards' margin and its bottom edge is the boards' bottom edge - subtracting
+ * the margin twice left every card 22px short of where the board draws it. */
 .wb-app {
   display: flex;
   flex-direction: column;
-  height: calc(100dvh - var(--shell-top, 0px) - var(--page-pad));
+  height: calc(100dvh - var(--shell-top, 0px));
   min-height: 0;
   padding: 0 var(--page-pad) var(--page-pad);
 }
@@ -331,6 +304,7 @@
  * for an app. */
 .wb-app .wb-view {
   padding: 0;
+  margin: 0;
   background: transparent;
   border: 0;
   border-radius: 0;
@@ -378,12 +352,13 @@
  * the wide one - the 320px rail is the rail wherever it sits. */
 .wb-view:has(> .wb-rail:not(:first-child)) { grid-template-columns: minmax(0, 1fr) 320px; }
 .wb-view:has(> .wb-rail-right) { grid-template-columns: 320px minmax(0, 1fr) 294px; }
-/* A rail is the height of the row it is in, not of the page: spanning a second
- * row creates an implicit auto row and the column grows with its list again,
- * which is how 海 reached 1448px twice. The action bar sits under the working
- * column, so the rail stops level with it - which is what the board draws. */
+/* A rail is the height of the *view*, not of the working column: the board
+ * draws it running past the action bar to the bottom margin. Spanning both rows
+ * is safe now that every column is pinned by hand - unpinned, the span made an
+ * implicit auto row and the column grew with its list, which is how 海 reached
+ * 1448px twice. */
 .wb-view > .wb-rail,
-.wb-view > .wb-rail-right { align-self: stretch; }
+.wb-view > .wb-rail-right { align-self: stretch; grid-row: 1 / -1; }
 /* Which side a rail is on is the markup's decision, not this file's: 壁, 池 and
  * 海 put it first and it is the left column, 川 puts it after the main column
  * and it is the right one. Reading the order keeps both honest, and pinning
@@ -525,10 +500,7 @@
 /* ------------------------------------------------------------ numbers and bars
  * The 40% bar is the magnitude channel, not a fourth depth step. */
 
-.wb-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-.wb-stat { padding: var(--space-2) var(--space-3); background: var(--surface-2); border-radius: var(--radius); }
-.wb-stat strong { display: block; font-size: var(--text-headline); font-weight: 600; }
-.wb-bars, .wb-breakdown { display: flex; flex-direction: column; gap: var(--space-2); }
+.wb-breakdown { display: flex; flex-direction: column; gap: var(--space-2); }
 .wb-bar-row {
   display: grid;
   /* `auto` for the label: ブリック待ち is the longest word in the app and a fixed
@@ -662,7 +634,9 @@
 }
 .wb-sheet {
   position: fixed;
-  top: var(--page-pad);
+  /* The board floats the sheet clear of the capsule rather than over it, and
+   * pins its actions to the bottom margin. */
+  top: calc(var(--capsule-top) + var(--capsule-h) + var(--space-5));
   right: var(--page-pad);
   bottom: var(--page-pad);
   z-index: 41;
@@ -733,3 +707,261 @@
 }
 .wb-source-main { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; font-weight: 600; }
 .wb-source-credit { margin-left: auto; text-align: right; }
+
+/* ------------------------------------------------------------------- 川 · 桶
+ * The board (zAWvX) draws the river narrow and the bucket wide, which is the
+ * opposite of a rail: the river is what you watch, and the bucket is the column
+ * you work in. 394px is the board's own measure, and the gutter and margins are
+ * the ones every other view uses.
+ */
+.wb-view:has(> .wb-col-river) { grid-template-columns: 394px minmax(0, 1fr); }
+/* Every column is a card of the row's height, not of its own content: the view
+ * grid aligns its items to the start, which a rail overrides for itself. */
+.wb-view:has(> .wb-col-river) > .wb-col-river,
+.wb-view:has(> .wb-col-river) > .wb-col-main { align-self: stretch; }
+.wb-col-river { display: flex; flex-direction: column; gap: var(--space-3); min-height: 0; min-width: 0; }
+/* The field is the column here rather than a fixed 440px box in a page. */
+.wb-col-river .wb-river { flex: 1 1 auto; height: auto; min-height: 0; }
+.wb-river-hint { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+.wb-bucket {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+.wb-bucket-head { display: flex; align-items: center; gap: var(--space-2); }
+.wb-bucket-glyph { display: inline-flex; color: var(--tint); }
+.wb-bucket-count { font-size: var(--text-title); font-weight: 700; letter-spacing: -0.02em; }
+.wb-bucket-unit { color: var(--muted); font-size: var(--text-footnote); }
+.wb-bucket-stats { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; color: var(--tint); font-size: var(--text-footnote); }
+.wb-bucket-stat { display: inline-flex; align-items: center; gap: 5px; }
+.wb-bucket-stat b { color: var(--text); font-variant-numeric: tabular-nums; }
+.wb-bucket-stat span { color: var(--muted); }
+.wb-bucket-stat.is-fresh, .wb-bucket-stat.is-fresh svg { color: var(--pos-noun); }
+.wb-bucket-sep { color: var(--muted-2); }
+
+/* The surface is the drop target: the words are the point, so it takes all the
+ * room the card has left and scrolls rather than growing the page. */
+.wb-bucket-surface {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+.wb-bucket-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 34px;
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: var(--text-callout);
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface);
+  border: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+.wb-bucket-chip:hover { color: var(--pos, var(--text)); }
+.wb-bucket-grip { color: var(--muted-2); font-size: var(--text-footnote); cursor: grab; }
+.wb-bucket-hint {
+  margin: 0;
+  text-align: center;
+  color: var(--muted-2);
+  font-size: var(--text-footnote);
+}
+.wb-bucket-hint::before { content: '▽ '; }
+
+/* ---------------------------------------------------------- the notice, floating
+ * The dictionary notice is a state message, not a band across the page. In the
+ * flow it pushed every column 90px down, which was the whole difference between
+ * the app and the boards; it floats now, and app.js takes it away again. It
+ * sits in the bottom margin, under everything the app draws, because the top
+ * strip is the capsule's and every view starts at the first pixel below it. */
+.wb-app > .notice {
+  position: fixed;
+  bottom: var(--space-1);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  max-width: min(760px, calc(100vw - 2 * var(--page-pad)));
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-footnote);
+  transition: opacity var(--motion-base) var(--ease-out), transform var(--motion-base) var(--ease-out);
+}
+.wb-app > .notice.is-lifted { opacity: 0; transform: translateX(-50%) translateY(8px); pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .wb-app > .notice { transition: none; }
+}
+
+/* ==========================================================================
+ * 海 - the board's own components, added after the first render showed what
+ * reading the boards could not: a magnitude channel with no fill, a rail row
+ * three lines tall, and a middle column that was not a card.
+ * ========================================================================== */
+
+/* The 内訳 bars are the magnitude channel: a neutral track and the hue at 40%,
+ * which is the one place in the design that 40% is used for. The fill span was
+ * in the markup from the start with no rule of its own, so every bar drew as a
+ * full-length track and no bar ever showed a size. */
+.wb-bar { height: 6px; background: var(--surface-3); border-radius: 3px; overflow: hidden; }
+.wb-bar > span { display: block; height: 100%; border-radius: 3px; background: color-mix(in srgb, var(--pos, var(--muted-2)) 40%, transparent); }
+.wb-bar-label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.wb-bar-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--pos, var(--muted-2)); }
+
+/* 自分の語彙 - four label/value rows rather than a grid of tiles: the numbers
+ * are read against each other, and 収録語数 is not a tile-sized idea. */
+.wb-stat-rows { display: flex; flex-direction: column; }
+.wb-stat-row { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) 0; font-size: var(--text-footnote); }
+.wb-stat-row + .wb-stat-row { border-top: 0.5px solid var(--separator); }
+.wb-stat-row strong { margin-left: auto; font-size: var(--text-callout); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 色の見方 - the ladder in words, next to the ladder in numbers. */
+.wb-legend { display: flex; flex-direction: column; gap: var(--space-2); }
+.wb-legend-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-footnote); }
+.wb-legend-sw { width: 20px; height: 12px; flex: 0 0 auto; border-radius: 3px; }
+.wb-legend-note { margin-left: auto; color: var(--muted-2); font-size: var(--text-caption); }
+
+/* 海's reading column is a card on every board - one surface from the top of the
+ * view to the bottom margin, with the blocks divided by hairlines. */
+#wbSea > .wb-col-main {
+  align-self: stretch;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+#wbSea .wb-entry-block > h3 { font-size: var(--text-footnote); font-weight: 600; color: var(--muted); margin: 0 0 var(--space-1); }
+#wbSea .wb-entry-block + .wb-entry-block { border-top: 0.5px solid var(--separator); padding-top: var(--space-3); }
+#wbSea .wb-entry-head .wb-chips { margin-left: auto; }
+
+/* 状態 is a ladder you read in one look: three rungs, and the word stands on
+ * one of them. Three lines of labels make the reader compare them to find out
+ * what one bar says. */
+.wb-meters { display: flex; gap: 3px; }
+.wb-meter { flex: 1 1 0; height: 6px; border-radius: 3px; background: var(--surface-3); }
+.wb-meter[data-on='1'] { background: color-mix(in srgb, var(--tint) 30%, transparent); }
+.wb-meter[data-rung='1'][data-on='1'] { background: var(--tint); }
+.wb-meter[data-rung='2'][data-on='1'] { background: var(--pos, var(--tint)); }
+.wb-meter-labels { display: flex; gap: 3px; margin-top: var(--space-1); }
+.wb-meter-label { flex: 1 1 0; font-size: var(--text-caption); color: var(--muted-2); }
+.wb-meter-label[data-on='1'] { color: var(--text); font-weight: 600; }
+
+/* 入っているブリック - one block per brick the word is in, with the way to it. */
+.wb-brick-block { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3); background: var(--surface-2); border-radius: var(--radius); }
+.wb-brick-tab { width: 4px; align-self: stretch; min-height: 22px; flex: 0 0 auto; border-radius: 2px; background: var(--pos, var(--muted-2)); }
+.wb-brick-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wb-brick-name { font-weight: 600; }
+.wb-brick-meta { color: var(--muted); font-size: var(--text-footnote); }
+.wb-brick-due { margin-left: auto; color: var(--muted); font-size: var(--text-footnote); white-space: nowrap; }
+
+/* カード - one row per mode, and the schedule that belongs to it. */
+.wb-mode-row { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-2) 0; font-size: var(--text-callout); }
+.wb-mode-row + .wb-mode-row { border-top: 0.5px solid var(--separator); }
+.wb-mode-due { margin-left: auto; color: var(--muted); font-size: var(--text-footnote); }
+
+/* 海's word list: one line per word - the monogram, the word, and its state as a
+ * chip. The board puts no definition here; the definition is the entry's job,
+ * and 辞書's trail is a different list with a different shape. */
+.wb-row--tight .wb-row-main { flex-direction: row; align-items: baseline; }
+.wb-row--tight .wb-row-main strong { font-size: var(--text-callout); }
+.wb-row--tight .wb-chip { flex: 0 0 auto; }
+
+/* 池's working column: the list runs from the lede down, and the filter and the
+ * two actions belong under it the way 壁's do. The board's sheet covers the
+ * strip where they would be, so the bottom bar is the one place they can sit
+ * without pushing the list 110px down the page. */
+#wbPool > .wb-col-main { align-self: stretch; min-height: 0; overflow: auto; }
+.wb-pool-bar { gap: var(--space-2); }
+.wb-pool-bar .btn { flex: 0 0 auto; }
+.wb-pool-bar .wb-segmented { flex: 0 0 auto; width: 336px; }
+.wb-pool-bar #wbPoolCount { margin-left: auto; }
+
+/* ==========================================================================
+ * 壁 · 復習 - the drill, which the board gives the same left rail as the wall
+ * plus the four totals, a progress strip across the top of the card, and the
+ * four grades as the largest controls on the page.
+ * ========================================================================== */
+
+/* The four totals as one row across the drill's rail, the way the board draws
+ * them: words / due / new / recognition, each an icon and a number. */
+.wb-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.wb-stats .wb-stat { display: flex; align-items: center; gap: 5px; padding: 0; background: transparent; }
+.wb-stats .wb-stat svg { flex: 0 0 auto; color: var(--muted); }
+.wb-stats .wb-stat strong { font-size: var(--text-footnote); font-variant-numeric: tabular-nums; }
+.wb-view#wbReview:has(> .wb-rail) > .wb-col-main { align-self: stretch; }
+.wb-review-strip { display: flex; align-items: center; gap: var(--space-3); }
+.wb-review-strip .wb-progress { flex: 1 1 auto; margin: 0; }
+/* The board draws the bar as ten cells rather than a continuous fill. */
+.wb-progress {
+  background-image: repeating-linear-gradient(90deg, transparent 0 86px, var(--surface) 86px 96px);
+}
+.wb-review-strip .btn:last-child { margin-left: auto; }
+#wbReview > .wb-col-main .wb-card { flex: 1 1 auto; min-height: 0; align-content: start; }
+#wbReview .wb-term { font-size: clamp(2.4rem, 1.6rem + 3vw, 4rem); }
+#wbReview .wb-definition { font-size: var(--text-title); line-height: 1.6; margin-top: var(--space-4); }
+#wbReview .card-example { font-size: var(--text-callout); color: var(--muted); }
+#wbReview .wb-card { padding: var(--space-5) var(--space-4); }
+.wb-grade { flex-direction: column; min-height: 74px; font-size: var(--text-callout); border-radius: var(--radius); }
+.wb-grade .wb-when { opacity: 0.8; }
+
+/* ==========================================================================
+ * 海 · ブリック総覧 (rNm6y) - the rail filters the whole matrix by stage, the
+ * stage breakdown is the matrix in numbers, and every brick is a course you can
+ * take to the wall.
+ * ========================================================================== */
+
+.wb-rail-block { display: flex; flex-direction: column; gap: var(--space-2); min-height: 0; }
+.wb-rail-block .wb-rail-title { font-size: var(--text-footnote); color: var(--muted); }
+.wb-brick-matrix { display: flex; flex-wrap: wrap; gap: 2px; align-content: flex-start; overflow: auto; }
+.wb-mini-row.is-dim { opacity: 0.22; }
+.wb-stage-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.wb-stage-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-footnote);
+}
+
+.wb-brick-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+.wb-brick-card-head { display: flex; align-items: center; gap: var(--space-2); }
+.wb-brick-card-head strong { font-weight: 600; }
+.wb-brick-card-foot { display: flex; align-items: center; gap: var(--space-3); }
+.wb-brick-card-foot .wb-link { margin-left: auto; }
+.wb-brick-card-foot .wb-link + .wb-link { margin-left: 0; }
+.wb-link {
+  font: inherit;
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--tint);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.wb-link.is-quiet { color: var(--muted); font-weight: 400; }

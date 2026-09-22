@@ -154,7 +154,38 @@ window.ML = (function () {
     }
 
     buildUiLangSwitch();
+    watchNotice();
     setText('year', new Date().getFullYear());
+  }
+
+  /* The dictionary notice floats over the app instead of pushing it down (see
+   * `.wb-app > .notice` in wordbook.css), and it takes itself away. The engine
+   * owns both its text and its visibility, so this watches the element rather
+   * than wrapping the call: whatever showed it, it is gone a few seconds later,
+   * and the app behind it is laid out as if it had never been there. */
+  var NOTICE_MS = 6000;
+
+  function watchNotice() {
+    var notice = $('wbDictNotice');
+    if (!notice || typeof window.MutationObserver !== 'function') return;
+    var timer = null;
+    var lifting = false;
+    function lift() {
+      lifting = true;
+      notice.classList.add('is-lifted');
+      timer = window.setTimeout(function () {
+        notice.classList.add('hidden');
+        notice.classList.remove('is-lifted');
+        lifting = false;
+      }, 320);
+    }
+    function schedule() {
+      if (lifting || notice.classList.contains('hidden')) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(lift, NOTICE_MS);
+    }
+    new window.MutationObserver(schedule).observe(notice, { attributes: true, attributeFilter: ['class'] });
+    schedule();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initChrome);

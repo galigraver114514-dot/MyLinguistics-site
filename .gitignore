@@ -17,3 +17,7 @@ yarn-error.log*
 
 # Local scratch files
 *.local
+
+# The design boards re-export here; the PNGs are derived from designs/design.pen
+# and would be rewritten every round, so they are not versioned.
+designs/exports/

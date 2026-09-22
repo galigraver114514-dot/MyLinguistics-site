@@ -60,7 +60,8 @@ var state = {
   brick: null,
   sessionAgains: 0,
   brickPaced: false,
-  brickResult: null
+  brickResult: null,
+  brickFilter: 'all'
 };
 
 /* English fallbacks keep the engine usable when loaded without the site runtime
@@ -70,6 +71,12 @@ var FALLBACK = {
   'wb.stat.due': 'Due',
   'wb.stat.new': 'New',
   'wb.stat.recognition': 'Recognition',
+  /* 海's four counts. The wall's strip is gone - the board draws the brick list
+   * there - so these are the totals the engine still renders. */
+  'sea.stats.keys': 'Lookup keys',
+  'sea.stats.mine': 'Your vocabulary',
+  'sea.stats.cards': 'Cards',
+  'sea.stats.bricks': 'Bricks',
   'wb.mode.recognition': 'Recognition',
   'wb.mode.output': 'Output',
   'wb.known': 'Already know it',
@@ -187,10 +194,19 @@ function esc(value) {
     .split('"').join('&quot;');
 }
 
+/* Both spellings, because the markup carries the attribute on the two pool
+ * sheets and the backdrop while everything else carries the class: toggling
+ * only the class left a sheet that could never open, which is not a styling
+ * detail - it is the whole packing flow being unreachable. */
 function show(node, visible) {
   if (!node) return;
-  if (visible) node.classList.remove('hidden');
-  else node.classList.add('hidden');
+  if (visible) {
+    node.classList.remove('hidden');
+    node.removeAttribute('hidden');
+  } else {
+    node.classList.add('hidden');
+    node.setAttribute('hidden', '');
+  }
 }
 
 function percent(fraction) {
@@ -309,16 +325,30 @@ async function forgetDictionaries() {
 
 /* ------------------------------------------------------------------ stats */
 
+/* The four totals belong to 復習 and not to 壁: the board puts this strip at the
+ * top of the drill's rail - words, due, new, recognition - above the course
+ * list, where the question "how much is left" is being asked. 壁's own rail is
+ * the brick list and nothing else. */
+var STAT_ICONS = {
+  words: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3 3 7.5 12 12l9-4.5Z"></path><path d="m3 12.5 9 4.5 9-4.5"></path></svg>',
+  due: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>',
+  fresh: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M12 3.5 14 10l6.5 2-6.5 2-2 6.5-2-6.5L3.5 12 10 10Z"></path></svg>',
+  recognition: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 12a8 8 0 1 1 3 6.2"></path><path d="M4 19v-5h5"></path></svg>'
+};
+
 function renderStats() {
+  var node = el('wbStats');
+  if (!node) return;
   var s = state.stats || {};
   var cells = [
-    [tText('wb.stat.words'), s.words || 0],
-    [tText('wb.stat.due'), s.due || 0],
-    [tText('wb.stat.new'), s.fresh || 0],
-    [tText('wb.stat.recognition'), (s.recognition || 0) + '%']
+    ['words', tText('wb.stat.words'), s.words || 0],
+    ['due', tText('wb.stat.due'), s.due || 0],
+    ['fresh', tText('wb.stat.new'), s.fresh || 0],
+    ['recognition', tText('wb.stat.recognition'), (s.recognition || 0) + '%']
   ];
-  el('wbStats').innerHTML = cells.map(function (cell) {
-    return '<div class="wb-stat"><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>';
+  node.innerHTML = cells.map(function (cell) {
+    return '<div class="wb-stat" title="' + esc(cell[1]) + '">' + STAT_ICONS[cell[0]] +
+      '<strong>' + esc(cell[2]) + '</strong></div>';
   }).join('');
 }
 
@@ -342,10 +372,14 @@ async function refresh() {
     if (!state.cardsBySense[card.senseId]) state.cardsBySense[card.senseId] = [];
     state.cardsBySense[card.senseId].push(card);
   });
-  /* The part of speech a word shows as comes from its own tag, and falls back
-   * to the first sense's, because a mined word has no tag of its own. */
+  /* The part of speech a word shows as - and therefore the hue every chip, cell
+   * and glyph is drawn in - comes from the word's own tag, or from its first
+   * sense. `pos` is where the store keeps it: reading only `word.tag` left every
+   * word in the book neutral grey, which is the one thing the colour contract
+   * says a word must never be. */
   words.forEach(function (word) {
     var tag = word.tag || null;
+    if (!tag && Array.isArray(word.pos) && word.pos.length) tag = word.pos[0];
     if (!tag) {
       var sids = word.senseIds || [];
       for (var i = 0; i < sids.length && !tag; i += 1) {
@@ -807,12 +841,21 @@ async function resetAll() {
 }
 
 /* ------------------------------------------------------------------ river
- * The word river: a field of words flowing in lanes, and a net. It never
- * writes to FSRS. A caught word goes into the pool and is carded mechanically;
- * a word that is already the learner's own keeps its sense and its schedule.
+ * The word river, and the bucket at its end. 川 is a stream you cannot hold;
+ * 桶 is the handful you caught, held until you decide about it. A catch lands
+ * in the bucket and stops there - nothing is carded, nothing is scheduled, and
+ * nothing has entered 池 until 池へ says so. That is the cycle the system
+ * diagram draws (designs gRwYR): 海 → 川 → 桶 → 池 → ブリック → 海 → 壁.
  */
 
-var RIVER = { view: null, pool: [], cursor: 0, loading: false, token: null, paused: false, pending: null, sample: 60, count: 70 };
+var RIVER = {
+  view: null, pool: [], cursor: 0, loading: false, token: null, paused: false,
+  pending: null, sample: 60, count: 70,
+  /* The bucket is deliberately not the pool: emptying it is a decision. */
+  bucket: [],
+  speed: 1
+};
+var RIVER_SPEEDS = [0.5, 1, 2];
 
 /* The pool: the learner's words, the captured candidates, and a dictionary
  * sample, in one shuffled list. It is refilled in the background before it runs
@@ -882,6 +925,9 @@ async function startRiver() {
   RIVER.view = createRiverView(canvas, {
     fallback: el('wbRiverFallback'),
     count: RIVER.count,
+    /* Five lanes across the board's 394px river. The field divides its own
+     * width, so this also gives a phone three or four lanes rather than eight. */
+    columnWidth: 78,
     nextWord: nextRiverWord,
     onCatch: handleRiverCatch
   });
@@ -889,9 +935,22 @@ async function startRiver() {
   RIVER.view.start();
   var pause = el('wbRiverPause');
   if (pause) pause.textContent = tText('wb.river.pause');
+  RIVER.lastSpeed = 1;
+  applyRiverSpeed();
   updateRiverCount();
+  renderBucket();
   /* A seam for the page tests, and a handle for debugging. */
-  if (window.ML) window.ML.river = { field: RIVER.view.field, view: RIVER.view, pool: function () { return RIVER.pool; } };
+  if (window.ML) {
+    window.ML.river = {
+      field: RIVER.view.field,
+      view: RIVER.view,
+      pool: function () { return RIVER.pool; },
+      bucket: function () { return RIVER.bucket.slice(); },
+      catch: function (term, reading) { return bucketAdd(term, reading); },
+      toPool: bucketToPool,
+      empty: bucketReturnAll
+    };
+  }
 }
 
 function stopRiver() {
@@ -904,31 +963,139 @@ function stopRiver() {
   }
 }
 
-/* One cast, one word. The catch goes straight into the pool and is carded, so
- * nothing stands between the finger and the result; the note says what
- * happened, including when the word was already there. */
+/* One cast, one word - and the word lands in the bucket, not in the pool. The
+ * bucket is the stage the cycle diagram draws between 川 and 池 and it is the
+ * one place in the flow where the learner, not the engine, decides: nothing has
+ * been carded yet, so 取消 can still put the word back in the river. */
 function handleRiverCatch(item) {
   if (!item || !item.term) return;
   RIVER.pending = item.term;
-  collectRiverCatch();
+  bucketAdd(item.term, item.reading);
+  if (RIVER.view) RIVER.view.release();
 }
 
-async function collectRiverCatch() {
-  var term = RIVER.pending;
+function bucketIndexOf(term) {
+  for (var i = 0; i < RIVER.bucket.length; i += 1) {
+    if (RIVER.bucket[i].term === term) return i;
+  }
+  return -1;
+}
+
+function bucketAdd(term, reading) {
+  if (!term) return false;
+  if (bucketIndexOf(term) < 0) RIVER.bucket.push({ term: term, reading: reading || '' });
   RIVER.pending = null;
-  if (!term) return;
-  var result = await state.lex.addToPool({ wordKey: term }, { dictionary: state.dictionary });
-  if (result && result.state === 'carded') await state.lex.buildBricks();
-  if (RIVER.view) RIVER.view.release();
+  renderBucket();
   var note = el('wbRiverCatch');
   if (note) {
-    note.textContent = result && result.state === 'carded'
-      ? tText('wb.river.keptOne', { word: term })
-      : tText('wb.river.hadOne', { word: term });
+    note.textContent = tText('wb.bucket.kept', { word: term });
+    show(note, true);
+  }
+  return true;
+}
+
+/* Emptying the bucket is the only thing here that touches the pool. 池へ hands
+ * every caught word to 池 and stops: the words wait there for a brick, and
+ * packing one is the decision the two sheets exist to take. Building bricks on
+ * the way through would make 池 a corridor instead of a workshop - and it would
+ * take the choice of what goes into a brick away from the person making it. */
+async function bucketToPool() {
+  var items = RIVER.bucket.slice();
+  if (!items.length) return;
+  RIVER.bucket = [];
+  renderBucket();
+  var moved = 0;
+  for (var i = 0; i < items.length; i += 1) {
+    try {
+      var result = await state.lex.addToPool({ wordKey: items[i].term }, { dictionary: state.dictionary });
+      if (result) moved += 1;
+    } catch (err) { /* one bad word does not stop the rest */ }
+  }
+  var note = el('wbRiverCatch');
+  if (note) {
+    note.textContent = tText('wb.bucket.moved', { n: moved });
     show(note, true);
   }
   await refresh();
   await renderPool();
+  go('pool');
+}
+
+/* 取消 - back to the river. Nothing was written, so nothing has to be undone:
+ * the words simply return to the stream they came from. */
+function bucketReturnAll() {
+  if (!RIVER.bucket.length) return;
+  var n = RIVER.bucket.length;
+  RIVER.bucket = [];
+  renderBucket();
+  var note = el('wbRiverCatch');
+  if (note) {
+    note.textContent = tText('wb.bucket.returned', { n: n });
+    show(note, true);
+  }
+}
+
+function bucketReturnOne(term) {
+  var at = bucketIndexOf(term);
+  if (at < 0) return;
+  RIVER.bucket.splice(at, 1);
+  renderBucket();
+  var note = el('wbRiverCatch');
+  if (note) {
+    note.textContent = tText('wb.bucket.returnedOne', { word: term });
+    show(note, true);
+  }
+}
+
+/* The bucket's head: how many words are held, and what the pool's own state
+ * looks like from here, so sending them on is an informed press. */
+function bucketCounts() {
+  var waiting = (state.pool || []).filter(function (item) { return item.state === 'carded'; }).length;
+  var fresh = (state.inbox || []).length;
+  return { pool: waiting, fresh: fresh };
+}
+
+function renderBucket() {
+  var surface = el('wbBucketSurface');
+  var count = el('wbBucketCount');
+  if (count) count.textContent = String(RIVER.bucket.length);
+  var counts = bucketCounts();
+  var pool = el('wbBucketPool');
+  if (pool) pool.textContent = String(counts.pool);
+  var fresh = el('wbBucketNew');
+  if (fresh) fresh.textContent = String(counts.fresh);
+  var toPool = el('wbRiverToPool');
+  if (toPool) toPool.disabled = !RIVER.bucket.length;
+  var cancel = el('wbRiverCancel');
+  if (cancel) cancel.disabled = !RIVER.bucket.length;
+  if (!surface) return;
+  surface.innerHTML = RIVER.bucket.map(function (item) {
+    var pos = posOf(item.term);
+    return '<button class="wb-bucket-chip" type="button" data-bucket-return="' + esc(item.term) + '"' +
+      (pos ? ' data-pos="' + esc(groupOf(pos)) + '"' : '') +
+      ' title="' + esc(tText('wb.bucket.returnOne')) + '">' +
+      '<span class="wb-bucket-grip" aria-hidden="true">⠿</span>' +
+      '<span class="wb-bucket-word">' + esc(item.term) + '</span>' +
+    '</button>';
+  }).join('');
+}
+
+/* 流速 - the stream's own pace, not a state. Mutating the columns the field
+ * already handed out keeps the words that are on screen: only the fall speeds
+ * change. */
+function applyRiverSpeed() {
+  if (!RIVER.view || !RIVER.view.field || typeof RIVER.view.field.columns !== 'function') return;
+  var columns = RIVER.view.field.columns();
+  for (var i = 0; i < columns.length; i += 1) columns[i].speed = (columns[i].speed / (RIVER.lastSpeed || 1)) * RIVER.speed;
+  RIVER.lastSpeed = RIVER.speed;
+  var button = el('wbRiverSpeed');
+  if (button) button.textContent = tText('wb.river.speedValue', { x: RIVER.speed });
+}
+
+function cycleRiverSpeed() {
+  var at = RIVER_SPEEDS.indexOf(RIVER.speed);
+  RIVER.speed = RIVER_SPEEDS[(at + 1) % RIVER_SPEEDS.length];
+  applyRiverSpeed();
 }
 
 function toggleRiver() {
@@ -1053,10 +1220,17 @@ async function renderWall() {
 /* The left column: every brick, with its ten cells at a glance. Each row is
  * also how a specific brick is taken off the wall. */
 function renderWallRail(bricks) {
-  var list = el('wbWallList');
-  if (!list) return;
-  if (!bricks.length) { list.innerHTML = ''; return; }
-  list.innerHTML = bricks.map(function (brick) {
+  /* 壁 and 復習 draw the same course list; the board gives the drill the same
+   * rail as the wall, with the totals above it and the current course lit. */
+  var lists = [el('wbWallList'), el('wbReviewList')].filter(Boolean);
+  if (!lists.length) return;
+  var count = el('wbReviewCount');
+  if (count) count.textContent = tText('wall.items', { n: bricks.length });
+  if (!bricks.length) {
+    lists.forEach(function (node) { node.innerHTML = ''; });
+    return;
+  }
+  var html = bricks.map(function (brick) {
     var cells = (brick.wordKeys || []).map(function (key) {
       return '<span class="wb-mini-cell" data-pos="' + esc(groupOf(posOf(key))) + '"></span>';
     }).join('');
@@ -1067,6 +1241,7 @@ function renderWallRail(bricks) {
       '<span class="muted small">' + esc(tText(phaseKey(brick))) + ' · ' + esc(dueLabel(brick)) + '</span></span>' +
     '</button>';
   }).join('');
+  lists.forEach(function (node) { node.innerHTML = html; });
 }
 
 /* Take a brick off the wall and start its session. */
@@ -1128,38 +1303,48 @@ async function renderEntry() {
     (word.reading ? '<span class="card-reading">' + esc(word.reading) + '</span>' : '') +
     '<span class="wb-chips">' +
       '<span class="wb-chip">' + esc(posOf(key) || '') + '</span>' +
-      '<span class="wb-chip">' + esc(tText(stateKeyOf(key))) + '</span>' +
     '</span>' +
   '</header>';
   if (definition) html += '<p class="wb-definition">' + esc(definition) + '</p>';
 
-  var steps = [
-    ['sea.state.candidate', 'new'],
-    ['sea.state.waiting', 'carded'],
-    ['sea.state.bricked', 'bricked']
-  ];
+  /* 状態 is the ladder the word stands on, and the board draws it as three
+   * rungs rather than three labels: 候補 at the pale end, ブリック待ち at the
+   * tint, ブリック入り in the word's own hue - the one rung that is
+   * membership rather than progress. */
+  var steps = ['sea.state.candidate', 'sea.state.waiting', 'sea.state.bricked'];
   var reached = record ? record.state : 'new';
   var at = { new: 0, inbox: 0, carded: 1, bricked: 2, known: 3, dismissed: 3 }[reached];
-  html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.state')) + '</h3><div class="wb-bars">' +
-    steps.map(function (step, index) {
-      return '<div class="wb-bar-row' + (at != null && index <= at ? ' is-reached' : '') + '">' +
-        '<span class="wb-bar-label">' + esc(tText(step[0])) + '</span></div>';
-    }).join('') +
-  '</div></section>';
+  html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.state')) + '</h3>' +
+    '<div class="wb-meters">' +
+      steps.map(function (step, index) {
+        return '<span class="wb-meter" data-rung="' + index + '" data-on="' + (at != null && index <= at ? '1' : '0') + '"></span>';
+      }).join('') +
+    '</div>' +
+    '<div class="wb-meter-labels">' +
+      steps.map(function (step, index) {
+        return '<span class="wb-meter-label" data-on="' + (at != null && index <= at ? '1' : '0') + '">' + esc(tText(step)) + '</span>';
+      }).join('') +
+    '</div>' +
+  '</section>';
 
   if (brick) {
+    var brickPos = brick.group && brick.group.kind === 'pos' ? groupOf(brick.group.value) : 'mixed';
     html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.brick')) + '</h3>' +
-      '<p><strong>' + esc(formatBrickLabel(brick, tText)) + '</strong> ' +
-      '<span class="muted small">' + esc(tText('overview.brickSize', { n: brick.size })) + ' · ' + esc(dueLabel(brick)) + '</span>' +
-      '<button class="btn btn-ghost btn-small" type="button" data-entry-brick="' + esc(brick.id) + '">' + esc(tText('entry.seeInWall')) + '</button></p></section>';
+      '<div class="wb-brick-block" data-pos="' + esc(brickPos) + '">' +
+        '<span class="wb-brick-tab" aria-hidden="true"></span>' +
+        '<span class="wb-brick-text"><span class="wb-brick-name">' + esc(formatBrickLabel(brick, tText)) + '</span>' +
+        '<span class="wb-brick-meta">' + esc(tText('overview.brickSize', { n: brick.size })) + '</span></span>' +
+        '<span class="wb-brick-due">' + esc(dueLabel(brick)) + '</span>' +
+        '<button class="btn btn-ghost btn-small" type="button" data-entry-brick="' + esc(brick.id) + '">' + esc(tText('entry.seeInWall')) + '</button>' +
+      '</div></section>';
   }
 
   if (cards.length) {
     html += '<section class="wb-entry-block"><h3>' + esc(tText('entry.modes')) + '</h3>' +
       cards.map(function (card) {
         var due = card.srs && card.srs.due ? card.srs.due - Date.now() : 0;
-        return '<div class="wb-card-row"><span>' + esc(modeLabel(card.mode)) + '</span>' +
-          '<span class="muted small">' + esc(formatDue(due)) + '</span></div>';
+        return '<div class="wb-mode-row"><span class="wb-mode-name">' + esc(modeLabel(card.mode)) + '</span>' +
+          '<span class="wb-mode-due">' + esc(tText('entry.next', { when: formatDue(due) })) + '</span></div>';
       }).join('') + '</section>';
   }
 
@@ -1192,11 +1377,10 @@ async function renderBrowse() {
     var definition = sense && sense.definition ? (sense.definition.text || '') : '';
     var haystack = (key + ' ' + (word.reading || '') + ' ' + definition).toLowerCase();
     if (filter && haystack.indexOf(filter) < 0) return;
-    rows.push('<button class="wb-row" type="button" data-word="' + esc(key) + '"' + (key === state.entryKey ? ' aria-current="true"' : '') + '>' +
+    rows.push('<button class="wb-row wb-row--tight" type="button" data-word="' + esc(key) + '"' + (key === state.entryKey ? ' aria-current="true"' : '') + '>' +
       monogram(key) +
-      '<span class="wb-row-main"><strong>' + esc(key) + '</strong>' +
-      '<span class="muted small">' + esc(definition) + '</span></span>' +
-      '<span class="wb-row-meta">' + esc(tText(stateKeyOf(key))) + '</span>' +
+      '<span class="wb-row-main"><strong>' + esc(key) + '</strong></span>' +
+      '<span class="wb-chip">' + esc(tText(stateKeyOf(key))) + '</span>' +
     '</button>');
   });
   var body = el('wbBrowseBody');
@@ -1330,15 +1514,35 @@ function renderBreakdown(node, rows) {
   var max = 1;
   rows.forEach(function (row) { if (row[1] > max) max = row[1]; });
   node.innerHTML = rows.map(function (row) {
-    return '<div class="wb-bar-row"><span class="wb-bar-label">' + esc(row[0]) + '</span>' +
-      '<span class="wb-bar" data-pos="' + esc(row[3] || 'mixed') + '"><span style="width:' + esc(String(Math.round((row[1] / max) * 100))) + '%"></span></span>' +
+    return '<div class="wb-bar-row"><span class="wb-bar-label" data-pos="' + esc(row[3] || 'mixed') + '">' +
+      '<span class="wb-bar-dot" aria-hidden="true"></span>' + esc(row[0]) + '</span>' +
+      '<span class="wb-bar"><span style="width:' + esc(String(Math.round((row[1] / max) * 100))) + '%"></span></span>' +
       '<span class="wb-bar-value">' + esc(String(row[1])) + '</span></div>';
+  }).join('');
+}
+
+/* 色の見方 - the ladder in words, beside the ladder in numbers. Three depths of
+ * one hue and the two neutrals; the swatches read the same tokens the app does,
+ * so the key cannot drift from what it explains. */
+function renderLegend() {
+  var node = el('wbSeaLegend');
+  if (!node) return;
+  var rows = [
+    [tText('sea.depth.none'), 'color-mix(in srgb, var(--tint) var(--depth-none), transparent)'],
+    [tText('sea.depth.learning'), 'color-mix(in srgb, var(--tint) var(--depth-learning), transparent)'],
+    [tText('sea.depth.review'), 'var(--tint)'],
+    [tText('sea.state.known'), 'var(--exit-known)'],
+    [tText('sea.state.ignored'), 'var(--exit-retired)']
+  ];
+  node.innerHTML = rows.map(function (row) {
+    return '<div class="wb-legend-row"><span class="wb-legend-sw" style="background:' + row[1] + '"></span>' +
+      '<span>' + esc(row[0]) + '</span></div>';
   }).join('');
 }
 
 function renderSeaStats() {
   var s = state.stats || {};
-  var cells = [
+  var cards = [
     [tText('sea.stats.keys'), state.dictCount || 0],
     [tText('sea.stats.mine'), s.words || 0],
     [tText('sea.stats.cards'), state.cardCount || 0],
@@ -1346,10 +1550,14 @@ function renderSeaStats() {
   ];
   var stats = el('wbSeaStats');
   if (stats) {
-    stats.innerHTML = cells.map(function (cell) {
-      return '<div class="wb-stat"><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>';
+    stats.innerHTML = cards.map(function (cell) {
+      return '<div class="wb-stat-row"><span>' + esc(cell[0]) + '</span><strong>' + esc(cell[1]) + '</strong></div>';
     }).join('');
   }
+  renderLegend();
+  var title = el('wbSeaCardTitle');
+  if (title) title.textContent = tText(state.scope === 'words' ? 'sea.stats.mine' : 'nav.sea');
+
   var byState = {};
   (state.pool || []).forEach(function (item) {
     byState[item.state] = (byState[item.state] || 0) + 1;
@@ -1360,7 +1568,33 @@ function renderSeaStats() {
     [tText('sea.state.bricked'), byState.bricked || 0, null, 'noun'],
     [tText('sea.state.known'), byState.known || 0, null, 'mixed'],
     [tText('sea.state.ignored'), byState.dismissed || 0, null, 'mixed']
-  ].map(function (row) { return [row[0], row[1], null, row[3]]; }));
+  ]);
+
+  /* ブリックの内訳 is the bricks by part of speech, not the words by state: the
+   * bricks are what the board's second card counts, and there are only ever a
+   * few dozen of them. */
+  var bricks = state.bricks || [];
+  var byPos = {};
+  bricks.forEach(function (brick) {
+    var group = (brick.group && brick.group.value) || '';
+    var at = POS_GROUP[group] || 'mixed';
+    byPos[at] = (byPos[at] || 0) + 1;
+  });
+  renderBreakdown(el('wbSeaBrickBreakdown'), Object.keys(POS_GROUP).map(function (pos) {
+    var key = POS_GROUP[pos];
+    return [pos, byPos[key] || 0, null, key];
+  }));
+
+  /* 品詞の内訳 counts the learner's words by part of speech. */
+  var byWordPos = {};
+  Object.keys(state.wordByLemma).forEach(function (key) {
+    var group = groupOf(posOf(key));
+    byWordPos[group] = (byWordPos[group] || 0) + 1;
+  });
+  renderBreakdown(el('wbSeaPosBreakdown'), Object.keys(POS_GROUP).map(function (pos) {
+    var key = POS_GROUP[pos];
+    return [pos, byWordPos[key] || 0, null, key];
+  }));
 }
 
 /* ------------------------------------------------------------------- view */
@@ -1438,10 +1672,14 @@ function markSeaScope(scope) {
     segments[i].classList.toggle('is-active', on);
     segments[i].setAttribute('aria-selected', on ? 'true' : 'false');
   }
+  /* A block may belong to more than one scope - 出典 follows the dictionaries
+   * and the bricks both - so the attribute is a space-separated list. */
   var blocks = document.querySelectorAll('#wbSea [data-scope-block]');
   for (var j = 0; j < blocks.length; j += 1) {
-    show(blocks[j], blocks[j].getAttribute('data-scope-block') === scope);
+    var scopes = String(blocks[j].getAttribute('data-scope-block') || '').split(/\s+/);
+    show(blocks[j], scopes.indexOf(scope) >= 0);
   }
+  renderSeaStats();
 }
 
 function setView(view) {
@@ -1474,22 +1712,39 @@ async function renderBricks() {
   var note = el('wbBricksNote');
   if (note) note.textContent = tText('sea.bricks.lede', { n: bricks.length });
 
+  /* The stage filter is the rail's, not the list's: the board filters the
+   * matrix of glyphs and the courses together, so the same choice drives both. */
+  var filter = state.brickFilter || 'all';
+  var shown = filter === 'all' ? bricks : bricks.filter(function (brick) { return brick.phase === filter; });
+  var buttons = document.querySelectorAll('#wbBrickFilter [data-brick-filter]');
+  for (var i = 0; i < buttons.length; i += 1) {
+    var on = buttons[i].getAttribute('data-brick-filter') === filter;
+    buttons[i].classList.toggle('is-active', on);
+    buttons[i].setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+
   var list = el('wbBricksList');
   if (list) {
-    list.innerHTML = bricks.length ? bricks.map(function (brick) {
+    list.innerHTML = bricks.length ? (shown.length ? shown.map(function (brick) {
+      var pos = brick.group && brick.group.kind === 'pos' ? groupOf(brick.group.value) : 'mixed';
       var words = (brick.wordKeys || []).map(function (key) {
         return '<span class="wb-brick-word" data-pos="' + esc(groupOf(posOf(key))) + '">' + esc(key) + '</span>';
       }).join('');
-      return '<article class="wb-inbox-item" data-brick="' + esc(brick.id) + '">' +
-        '<div class="wb-inbox-head"><strong>' + esc(brickLabel(brick)) + '</strong>' +
-        '<span class="wb-inbox-seen">' + esc(tText('overview.brickSize', { n: brick.size })) + '</span>' +
-        '<span class="muted small">' + esc(tText(phaseKey(brick))) + ' · ' + esc(dueLabel(brick)) + '</span></div>' +
+      return '<article class="wb-brick-card" data-brick="' + esc(brick.id) + '" data-pos="' + esc(pos) + '" data-phase="' + esc(brick.phase) + '">' +
+        '<header class="wb-brick-card-head">' +
+          '<span class="wb-brick-tab" aria-hidden="true"></span>' +
+          '<strong>' + esc(brickLabel(brick)) + '</strong>' +
+          '<span class="wb-chip">' + esc(tText('overview.brickSize', { n: brick.size })) + '</span>' +
+          '<span class="wb-chip">' + esc(tText(phaseKey(brick))) + '</span>' +
+        '</header>' +
         '<p class="wb-brick-words">' + words + '</p>' +
-        '<div class="wb-inbox-actions">' +
-        '<button class="btn btn-primary btn-small" type="button" data-grab-brick="' + esc(brick.id) + '">' + esc(tText('sea.bricks.grab')) + '</button>' +
-        '<button class="btn btn-ghost btn-small" type="button" data-brick-dissolve="' + esc(brick.id) + '">' + esc(tText('wb.bricks.dissolve')) + '</button>' +
-        '</div></article>';
-    }).join('') : '<p class="muted mb-0">' + esc(tText('wb.bricks.empty')) + '</p>';
+        '<footer class="wb-brick-card-foot">' +
+          '<span class="muted small">' + esc(dueLabel(brick)) + '</span>' +
+          '<button class="wb-link" type="button" data-grab-brick="' + esc(brick.id) + '">' + esc(tText('sea.bricks.grab')) + ' →</button>' +
+          '<button class="wb-link is-quiet" type="button" data-brick-dissolve="' + esc(brick.id) + '">' + esc(tText('wb.bricks.dissolve')) + '</button>' +
+        '</footer></article>';
+    }).join('') : '<p class="muted">' + esc(tText('wb.bricks.empty')) + '</p>')
+      : '<p class="muted mb-0">' + esc(tText('wb.bricks.empty')) + '</p>';
   }
 
   var grid = el('wbBricksGrid');
@@ -1498,7 +1753,21 @@ async function renderBricks() {
       var cells = (brick.wordKeys || []).map(function (key) {
         return '<span class="wb-mini-cell" data-pos="' + esc(groupOf(posOf(key))) + '"></span>';
       }).join('');
-      return '<div class="wb-mini-row" data-phase="' + esc(brick.phase) + '" aria-hidden="true">' + cells + '</div>';
+      var dim = filter !== 'all' && brick.phase !== filter ? ' is-dim' : '';
+      return '<div class="wb-mini-row' + dim + '" data-phase="' + esc(brick.phase) + '" aria-hidden="true">' + cells + '</div>';
+    }).join('');
+  }
+
+  /* 段階の内訳 - the matrix in numbers, one row per stage of the ladder. */
+  var stages = el('wbBrickStages');
+  if (stages) {
+    stages.innerHTML = ['sealed', 'learning', 'review', 'retired'].map(function (phase) {
+      var n = bricks.filter(function (brick) { return brick.phase === phase; }).length;
+      var cells = '';
+      for (var k = 0; k < 10; k += 1) cells += '<span class="wb-mini-cell"></span>';
+      return '<div class="wb-stage-row"><span class="wb-mini" data-phase="' + phase + '" data-pos="verb">' + cells + '</span>' +
+        '<span>' + esc(tText('wall.state.' + phase)) + '</span>' +
+        '<span class="wb-bar-value">' + esc(String(n)) + '</span></div>';
     }).join('');
   }
 }
@@ -1912,7 +2181,14 @@ function bind() {
   el('wbExport').addEventListener('click', exportJson);
   el('wbReset').addEventListener('click', resetAll);
   el('wbRiverPause').addEventListener('click', toggleRiver);
-  el('wbRiverShuffle').addEventListener('click', startRiver);
+  el('wbRiverSpeed').addEventListener('click', cycleRiverSpeed);
+  el('wbRiverToPool').addEventListener('click', bucketToPool);
+  el('wbRiverCancel').addEventListener('click', bucketReturnAll);
+  el('wbBucketSurface').addEventListener('click', function (event) {
+    var target = event.target;
+    var chip = target && target.closest ? target.closest('[data-bucket-return]') : null;
+    if (chip) bucketReturnOne(chip.getAttribute('data-bucket-return'));
+  });
   el('wbInboxList').addEventListener('click', function (event) {
     var target = event.target;
     if (!target || !target.getAttribute) return;
@@ -1920,6 +2196,13 @@ function bind() {
     var reject = target.getAttribute('data-reject');
     if (approve) approveCandidate(approve);
     else if (reject) rejectCandidate(reject);
+  });
+  el('wbBrickFilter').addEventListener('click', function (event) {
+    var target = event.target;
+    var picked = target && target.getAttribute ? target.getAttribute('data-brick-filter') : null;
+    if (!picked) return;
+    state.brickFilter = picked;
+    renderBricks();
   });
   el('wbBricksList').addEventListener('click', function (event) {
     var target = event.target;

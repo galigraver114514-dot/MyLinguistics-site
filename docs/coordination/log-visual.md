@@ -10,6 +10,61 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-23 - T6: the boards again, with the bucket put back
+
+The human reported three things: several places still do not match `design.pen`,
+桶 has disappeared entirely, and several places were never restored at all. They
+also granted **special full control of the project for a limited time** and asked
+for it to be recorded. That record is `docs/full-control.md` - one section per
+grant, appended, never rewritten. This is grant 1, and the entry below is what it
+was spent on. Under the grant I edited files owned by agent-wordbook and
+agent-reader's shared `i18n.js`; every one of them is listed in the ledger with
+its reason, and none of them was restructured on the way past.
+
+Commit `795b88b`. 376 tests pass. `node designs/verify/run.mjs` is 14/14 clean,
+including six routes that only exist once the app has been driven to them.
+
+### The bug the human named
+
+桶 was nowhere in the app. `handleRiverCatch` went straight to `addToPool` and
+carded the word on the way, so the one stage of the cycle that belongs to the
+learner - the words you have caught now, which you can still put back - did not
+exist. `RIVER.bucket` and its five actions now do, and 川 is the board's two
+columns: the river narrow on the left, the bucket wide on the right.
+
+Two things the human did not know were wrong, found while measuring against the
+boards:
+
+- **Every view but the first was 20px low and 22px short.** `.panel + .panel`
+  from the document layer still applied to `.wb-view` siblings, and `.wb-app`
+  subtracted the page margin twice. Fixed; the tables now start at the boards'
+  74px and end at 812px.
+- **The two pool sheets could not open at all.** `show()` toggles the `hidden`
+  *class*; the sheets and the backdrop carry the `hidden` *attribute*. The whole
+  packing flow was unreachable in a browser. `show()` now does both.
+
+And the reason the colour contract was invisible everywhere: `refresh()` read
+`word.tag`, the store writes `word.pos`, so every chip, monogram, bar and wall
+cell in the app was neutral grey.
+
+### REQUEST: R8 - `assets/js/i18n.js` (shared), taken under the grant
+
+`.wb-app`'s document layer is agent-reader's. The bucket needed copy in all three
+locales, so `i18n.js` was edited under grant 1 rather than waiting for an ANSWER:
+`wb.river.speed`, `wb.river.speedValue`, `wb.bucket.unit|pool|fresh|lede|drop|
+toPool|cancel|kept|moved|returned|returnedOne|returnOne`, `entry.next`, and
+`sea.breakdown.brick` - 14 keys, ja/en/zh each, additive only, no key renamed and
+no key's meaning changed. `wb.river.note` changed from "lands in the pool" to
+"lands in the bucket", which is the 桶 change itself. If any of the names want to
+be different, say so in the ANSWER and I will rename them.
+
+Something for agent-wordbook, not a request: three of your tests asserted on
+`#wbStats`, and one observed a definition through 海's list rows. No board draws
+a totals strip on 壁, and the board's list rows are one line per word, so the
+element is gone and the rows carry no definition. The four assertions now read
+the counts where 海 draws them and the definition where the entry puts it. If you
+want the totals strip back, it needs a board that draws one.
+
 ## 2026-09-23 - T5: the visual check is a kit in the repository now, not a recipe in a log
 
 The human asked for the verification tooling to be packaged so it can be reused
