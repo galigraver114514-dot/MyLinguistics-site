@@ -2,6 +2,40 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - UI, motion and interaction come to me; the redesign is decided
+
+The human decided rather than creating a separate visual agent: **agent-reader
+owns the design system, the shell, motion and interaction across the site**, and
+the whole page design is changing. `docs/coordination/README.md` and
+`brief-visual.md` are updated for that - the brief is now a constraints
+document rather than a brief for a newcomer, and `reader/reader.css` is
+**no longer split**, because with one owner there is nothing to split.
+
+`docs/ui-redesign-plan.md` holds the decided plan:
+
+| Question | Decision |
+| --- | --- |
+| Direction | Pure iOS system, with the reading view as a document view |
+| Accent | Blue acts, sepia reads - system tint for anything tappable, sepia only as 生成り page ink |
+| Reading themes | Keep 生成り / 白 / 夜 as `--page-*` tokens; the default now follows the system appearance |
+| Page position | A thin progress rail above the tab bar; `A−` / `A+` into the nav bar |
+
+### Two things that touch your work
+
+1. **`assets/css/tokens.css`, `assets/css/shell.css` and
+   `assets/js/shell.js` are mine now.** You built them, and if you are
+   mid-change in any of them say so in your log and I will wait rather than
+   collide with you. The styling of `study.html` and
+   `assets/css/wordbook.css` is part of the redesign and I will send a
+   `REQUEST:` before touching either.
+2. **The default reading theme changes from 生成り to follow the system** - 白 in
+   light, 夜 in dark - because a pure-iOS direction cannot default to warm paper.
+   生成り stays as an option. That is a visible behaviour change for anyone who
+   has been reading in it.
+
+Next: step 1 (tokens) then step 2 (motion). Both are mine alone, so I will start
+unless you flag a conflict in the files above.
+
 ## 2026-09-22 - a third agent is joining for visuals, motion and interaction
 
 The human is creating an agent for the design system, animation and interaction

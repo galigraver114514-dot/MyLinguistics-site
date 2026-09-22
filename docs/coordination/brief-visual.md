@@ -1,8 +1,12 @@
-# Brief: the visual, motion and interaction agent
+# Constraints: design system, motion and interaction
 
-Written by agent-reader for a third agent joining this repository. Read
-`README.md` in this directory first for the protocol; read this for the
-parts of the project that will bite you. Everything here was already paid for.
+**The human decided on 2026-09-22 that agent-reader owns this area** - the design
+system, the shell, motion and interaction, and the reader's surface - rather than
+a separate agent joining. This is therefore not a brief for a newcomer; it is the
+set of constraints for that work, written down because every item was already
+paid for and most of them are invisible until they bite.
+
+Read `README.md` in this directory first for the protocol, then this.
 
 ## 1. What you are joining
 
@@ -47,36 +51,26 @@ What that means for you:
 | `env(safe-area-inset-*)`, `100dvh` and standalone mode are real | the status bar area is a separate concern from the layout viewport |
 | Native vertical selection works | an offset-based selection is not needed for v1 |
 
-## 4. Territory: read this before you touch anything
-
-Current owners: **agent-reader** owns `reader/**` and `src/dict/**`;
-**agent-wordbook** owns `assets/**`, the root pages and `src/lexicon/**`.
-
-**The collision you are about to have.** "Visuals, animation, interaction" here
-spans three different filesystems:
-
-1. the **design system** (`assets/css/tokens.css`) and the **shell**
-   (`assets/css/shell.css`, `assets/js/shell.js`): nav bar, tab bar,
-   bottom sheets - built by agent-wordbook;
-2. the **reader's reading surface** (`reader/reader.css`) and its gestures
-   (`reader/js/app.js`) - agent-reader;
-3. the **wordbook pages** (`study.html`, `assets/css/wordbook.css`) -
-   agent-wordbook.
-
-Recommended split, which keeps one writer per file:
+## 4. Territory after the reassignment
 
 | Path | Owner |
 | --- | --- |
-| `assets/css/tokens.css` | **you** - a design system needs exactly one owner |
-| `assets/css/motion.css`, `assets/js/motion.js` (new) | **you** |
-| `assets/css/shell.css`, `assets/js/shell.js` | **you**, after an `ANSWER:` from agent-wordbook |
-| `reader/reader.css` | split: structure stays with agent-reader, a new `reader/theme.css` is **yours** |
-| `reader/js/**` | agent-reader. Request hooks; do not edit |
-| root `*.html` markup, `study.html` | agent-wordbook |
-| `assets/css/style.css`, `assets/css/wordbook.css` | agent-wordbook, or yours for visuals by agreement |
+| `reader/**` - surface, gestures, text model | agent-reader |
+| `assets/css/tokens.css` | agent-reader - a design system needs one owner |
+| `assets/css/shell.css`, `assets/js/shell.js` | agent-reader |
+| `assets/css/motion.css`, `assets/js/motion.js`, if a site-wide layer is ever needed | agent-reader |
+| root `*.html` **markup** | agent-wordbook, with agent-reader owning layout and styling |
+| `study.html`, `assets/css/wordbook.css` | agent-wordbook, consuming the tokens |
+| `assets/css/style.css`, `assets/js/i18n.js` | shared: `REQUEST:` / `ANSWER:` before editing |
+| `src/lexicon/**` | agent-wordbook |
 
-Taking a file that already has an owner needs a `CLAIM:` in your log and an
-`ANSWER:` in theirs. New files need only the `CLAIM:`.
+`docs/coordination/README.md` carries the full map. The rule that survives
+all of this is **one writer per file**: a change in a file owned by somebody else
+is a `REQUEST:` in your own log and an `ANSWER:` in theirs, never an
+edit.
+
+`reader/reader.css` is **no longer split**. With one owner there is nothing
+to split - a two-file split would only have existed to hand half of it away.
 
 ## 5. Interaction decisions already made - do not re-litigate quietly
 
