@@ -1,12 +1,23 @@
 /* MyLinguistics design tokens.
  *
- * The single source of truth for colour, spacing, radius, type and touch
- * sizing. Pages and components consume these names; nothing should hold a raw
- * hex value or a one-off pixel size.
+ * The single source of truth for colour, the state contract, spacing, radius,
+ * type, touch sizing and motion. Pages and components consume these names;
+ * nothing should hold a raw hex value or a one-off pixel size.
  *
  * The palette is Apple's system palette so the site reads as an iOS app on an
  * iPad: system backgrounds, labels, separators, and the system tint. Light and
  * dark define the same names.
+ *
+ * The state contract (see designs/ and docs/coordination/log-visual.md): a word
+ * or a brick states three things at once, and each one gets its own channel so
+ * that no channel has to carry two meanings.
+ *
+ *   形   = membership  the ten-cell brick glyph, the status chip, list order
+ *   濃淡 = progress    --depth-none / --depth-learning / --depth-review
+ *   色相 = part of speech  --pos-*
+ *   中性 = exit        --exit-known / --exit-retired
+ *
+ * Time is never a colour. A due date is written ("3日後"), not tinted.
  */
 
 :root {
@@ -41,9 +52,53 @@
   --warn: #a05a00;
   --warn-soft: rgba(255, 149, 0, 0.16);
 
+  /* Part of speech: the hue channel of the state contract.
+   *
+   * Six hues, and a word keeps its hue for its whole life - the hue answers
+   * "what kind of word is this?", never "how far along is it?". A seventh hue
+   * is a new part of speech, not a new state. */
+  --pos-verb: #007aff;
+  --pos-noun: #248a3d;
+  --pos-greet: #a05a00;
+  --pos-adv: #30b0c7;
+  --pos-expr: #af52de;
+  --pos-conj: #5856d6;
+
+  /* Depth: the progress channel, as an alpha over the hue.
+   *
+   *   background: color-mix(in srgb, var(--pos-verb) var(--depth-learning), transparent);
+   *
+   * This applies to content only. Interface chrome - a toggle, a segmented
+   * control, a sheet grabber - keeps its own neutral and is never swept into
+   * the ladder. */
+  --depth-none: 12%;
+  --depth-learning: 55%;
+  --depth-review: 100%;
+
+  /* Exit: a word or a brick that has left the ladder. Nothing here is a hue -
+   * leaving is not a part of speech and not a stage. */
+  --exit-known: #8e8e93;
+  --exit-retired: #c7c7cc;
+
   /* Material: the translucent bars */
   --material: rgba(249, 249, 249, 0.82);
   --blur: saturate(180%) blur(20px);
+
+  /* Motion: one language for the whole site (docs/ui-redesign-plan.md
+   * section 6). Everything that moves uses one of these durations and one of
+   * these curves; nothing invents its own. `prefers-reduced-motion: reduce`
+   * turns motion off rather than shortening it.
+   *
+   * Animates: page turn, sheet in and out, control feedback, nav title
+   * collapse, list insert and delete, marker appear, progress rail.
+   * Never animates: text reflow, font size, theme change, highlight paint -
+   * those are the reader changing its mind about typography, not the
+   * interface moving. */
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --motion-slow: 320ms;
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
@@ -122,6 +177,19 @@
   --danger-soft: rgba(255, 69, 58, 0.18);
   --warn: #ffd60a;
   --warn-soft: rgba(255, 214, 10, 0.16);
+
+  /* The same six parts of speech, at Apple's dark-mode values. A hue has to be
+   * legible as a 12% wash on a black surface as well as a solid on white, so
+   * the dark set is lighter rather than merely re-tinted. */
+  --pos-verb: #0a84ff;
+  --pos-noun: #30d158;
+  --pos-greet: #ff9f0a;
+  --pos-adv: #40c8e0;
+  --pos-expr: #bf5af2;
+  --pos-conj: #5e5ce6;
+
+  --exit-known: #98989f;
+  --exit-retired: #48484a;
 
   --material: rgba(30, 30, 32, 0.78);
 
