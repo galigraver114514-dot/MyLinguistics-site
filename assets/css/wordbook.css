@@ -28,19 +28,6 @@
   letter-spacing: -0.02em;
 }
 
-.wb-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.wb-tab.is-active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
 .wb-review-top {
   display: flex;
   flex-wrap: wrap;
@@ -133,93 +120,14 @@
   padding: 24px 0;
 }
 
-.wb-digest-list {
-  display: grid;
-  gap: 14px;
-}
-
-.wb-digest-item {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  padding: 16px 18px;
-  display: grid;
-  gap: 6px;
-}
-
-.wb-digest-head {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.wb-digest-head strong {
-  font-size: 1.35rem;
-  letter-spacing: -0.01em;
-}
-
-
-.wb-digest-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-}
-
 .wb-search {
   max-width: 420px;
   margin-bottom: 16px;
 }
 
-.wb-table-wrap {
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.wb-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.92rem;
-}
-
-.wb-table th,
-.wb-table td {
-  text-align: left;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
-
-.wb-table th {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--muted);
-}
-
-.wb-table tr:last-child td {
-  border-bottom: none;
-}
-
-
 @media (max-width: 820px) {
   .wb-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .wb-grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-.wb-manage {
-  margin-top: 18px;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-
-.wb-manage summary {
-  cursor: pointer;
-  width: max-content;
-}
-
-.wb-manage .row-actions {
-  margin-top: 10px;
 }
 
 /* The word river: a field of words flowing in lanes, and the net. */
@@ -385,3 +293,372 @@
 @media (prefers-reduced-motion: reduce) {
   .wb-progress-fill { transition: none; }
 }
+
+/* ==========================================================================
+ * The vocabulary app - 壁 / 川 / 池 / 海
+ *
+ * One view at a time. A view is the working column, a left rail where it has
+ * one, an optional right rail, and an action bar that belongs *under* the
+ * working column rather than beside the rails - which is why the rails span
+ * both rows of the grid instead of the bar being a third column.
+ *
+ * Colour is read off the two attributes the engine already writes, so nothing
+ * here names a colour for a word: `data-pos` says which part of speech it is
+ * and `data-phase` says how far the brick has come. 形 = membership,
+ * 濃淡 = progress, 色相 = part of speech, 中性 = exit.
+ * ========================================================================== */
+
+.wb-app {
+  min-height: calc(100dvh - var(--shell-top, 0px) - var(--page-pad));
+  padding: 0 var(--page-pad) var(--page-pad);
+}
+
+/* The hue channel, in one place: anything carrying data-pos can ask for
+ * var(--pos) afterwards instead of naming a colour of its own. */
+[data-pos='verb'] { --pos: var(--pos-verb); }
+[data-pos='noun'] { --pos: var(--pos-noun); }
+[data-pos='greet'] { --pos: var(--pos-greet); }
+[data-pos='adv'] { --pos: var(--pos-adv); }
+[data-pos='expr'] { --pos: var(--pos-expr); }
+[data-pos='conj'] { --pos: var(--pos-conj); }
+[data-pos='mixed'] { --pos: var(--muted-2); }
+
+/* The depth channel, likewise. 卒業 is not a fourth step: it has left the
+ * ladder, and leaving is a neutral rather than a hue. */
+[data-phase='sealed'] { --depth: var(--depth-none); }
+[data-phase='learning'] { --depth: var(--depth-learning); }
+[data-phase='review'] { --depth: var(--depth-review); }
+
+/* ------------------------------------------------------------ the view grid */
+
+.wb-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+.wb-view:has(> .wb-rail) { grid-template-columns: 320px minmax(0, 1fr); }
+.wb-view:has(> .wb-rail-right) { grid-template-columns: 320px minmax(0, 1fr) 294px; }
+.wb-view > .wb-rail,
+.wb-view > .wb-rail-right { grid-row: 1 / span 2; align-self: stretch; }
+.wb-view:has(> .wb-rail) > .wb-col-main,
+.wb-view:has(> .wb-rail) > .wb-actions-bar,
+.wb-view:has(> .wb-rail) > .wb-grades { grid-column: 2; }
+
+.wb-col-main { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.wb-head { display: flex; align-items: center; gap: var(--space-3); }
+.wb-title { font-size: var(--text-large-title); font-weight: 700; letter-spacing: -0.022em; margin: 0; }
+.wb-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-1);
+}
+.wb-actions-bar .btn:first-of-type { flex: 1 1 auto; }
+
+/* ------------------------------------------------------------- the two rails */
+
+.wb-rail,
+.wb-rail-right > .wb-card-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+  padding: var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+.wb-rail-right,
+.wb-rail-right > .wb-card-block { display: flex; flex-direction: column; gap: var(--space-3); }
+.wb-rail-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.wb-rail-title { font-size: var(--text-headline); font-weight: 600; letter-spacing: -0.012em; margin: 0; }
+.wb-rail-list { display: flex; flex-direction: column; gap: var(--space-1); overflow: auto; }
+
+.wb-rail-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2);
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.wb-rail-row:hover { background: var(--surface-2); }
+.wb-rail-row.is-active { background: var(--tint-soft); }
+.wb-rail-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wb-rail-main strong { font-weight: 600; }
+
+/* The ten-cell brick: one cell per word, so **the count is the brick's size** -
+ * the engine is allowed to emit a short brick - and the depth is the phase.
+ * Two channels in one 68x20 mark. */
+.wb-mini { display: flex; gap: 2px; flex: 0 0 auto; }
+.wb-mini-cell {
+  width: 5px;
+  height: 20px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--pos, var(--muted-2)) var(--depth, var(--depth-none)), transparent);
+}
+[data-phase='retired'] .wb-mini-cell { background: var(--exit-retired); }
+.wb-mini-row { display: flex; gap: 2px; flex-wrap: wrap; }
+
+/* ------------------------------------------------------------------ the wall */
+
+.wb-wall { display: flex; flex-direction: column; gap: var(--space-2); }
+.wb-wall-row {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+.wb-wall-head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+.wb-wall-head strong { font-weight: 600; }
+.wb-wall-tab { flex: 0 0 auto; width: 4px; height: 16px; border-radius: 2px; background: var(--pos, var(--muted-2)); }
+.wb-wall-due { margin-left: auto; }
+
+/* The cells are a reading surface, so the wash is **constant** - at 100% a
+ * 復習中 course would be a slab of saturated colour wanting white text, and the
+ * words are the point. The phase is carried by the rail's glyph and by the
+ * course's own label. */
+.wb-wall-cells { display: flex; flex-wrap: wrap; gap: 2px; }
+.wb-wall-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 76px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--pos, var(--muted-2)) var(--depth-none), transparent);
+  color: var(--pos, var(--text));
+  font-size: var(--text-callout);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wb-wall-cell-empty { background: var(--surface-3); }
+
+/* ------------------------------------------------------ segmented control */
+
+.wb-segmented {
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  background: var(--surface-2);
+  border-radius: calc(var(--capsule-item) / 2 + 6px);
+}
+.wb-seg {
+  flex: 1 1 0;
+  min-height: var(--capsule-item);
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--text-footnote);
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--capsule-item) / 2);
+  cursor: pointer;
+}
+.wb-seg.is-active { background: var(--surface); color: var(--tint); box-shadow: var(--shadow-sm); }
+
+/* ------------------------------------------------------------ numbers and bars
+ * The 40% bar is the magnitude channel, not a fourth depth step. */
+
+.wb-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.wb-stat { padding: var(--space-2) var(--space-3); background: var(--surface-2); border-radius: var(--radius); }
+.wb-stat strong { display: block; font-size: var(--text-headline); font-weight: 600; }
+.wb-bars, .wb-breakdown { display: flex; flex-direction: column; gap: var(--space-2); }
+.wb-bar-row {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) 3rem;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-footnote);
+}
+.wb-bar {
+  height: 6px;
+  width: var(--bar, 100%);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--pos, var(--muted-2)) 40%, transparent);
+}
+.wb-bar-value { text-align: right; color: var(--muted); }
+
+/* --------------------------------------------------------------- list rows */
+
+.wb-inbox-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.wb-inbox-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+.wb-inbox-head { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.wb-inbox-rank { color: var(--muted); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.wb-inbox-seen { color: var(--muted); font-size: var(--text-caption); }
+.wb-inbox-actions { display: flex; align-items: center; gap: var(--space-1); margin-left: auto; }
+.wb-chip {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--muted);
+  font-size: var(--text-caption);
+  font-weight: 600;
+}
+.wb-chips { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.wb-monogram {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  background: var(--pos, var(--surface-3));
+  color: var(--tint-contrast);
+  font-size: var(--text-caption);
+  font-weight: 700;
+}
+
+/* The pool's log: what happened, newest first. */
+.wb-log-row { display: flex; align-items: baseline; gap: var(--space-3); padding: var(--space-1) 0; }
+.wb-log-time { flex: 0 0 auto; width: 3rem; color: var(--muted); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.wb-log-main { min-width: 0; font-size: var(--text-footnote); }
+
+.wb-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
+.wb-row + .wb-row { border-top: 0.5px solid var(--separator); }
+.wb-row-main { min-width: 0; }
+.wb-row-meta { margin-left: auto; color: var(--muted); font-size: var(--text-footnote); }
+.wb-card-row { display: flex; align-items: center; gap: var(--space-3); }
+
+/* --------------------------------------------------------- 海: entry, dictionary */
+
+.wb-view-block { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.wb-search { display: block; }
+.wb-search input { width: 100%; }
+.wb-entry { display: flex; flex-direction: column; gap: var(--space-3); }
+.wb-entry-head { display: flex; align-items: baseline; gap: var(--space-3); }
+.wb-entry-term { font-size: var(--text-large-title); font-weight: 700; margin: 0; }
+.wb-entry-block, .wb-card-block { display: flex; flex-direction: column; gap: var(--space-2); }
+.wb-definition { margin: 0; }
+.wb-sense { display: flex; gap: var(--space-2); }
+.wb-sense-no { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wb-sense-text { min-width: 0; }
+.wb-dict-blocks { display: flex; flex-direction: column; gap: var(--space-3); }
+.wb-dict-block { padding: var(--space-3) 0; }
+.wb-dict-block + .wb-dict-block { border-top: 0.5px solid var(--separator); }
+.wb-dict-head { display: flex; align-items: baseline; gap: var(--space-2); }
+.wb-dict-entry { padding: var(--space-2) 0; }
+.wb-brick-words { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.wb-brick-word {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--pos, var(--muted-2)) var(--depth-none), transparent);
+  color: var(--pos, var(--text));
+  font-size: var(--text-footnote);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------- forms and details */
+
+.wb-sub { padding: var(--space-2) 0; }
+.wb-sub > summary { cursor: pointer; color: var(--muted); font-size: var(--text-footnote); }
+.wb-manage-block { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) 0; }
+.wb-manage-block + .wb-manage-block { border-top: 0.5px solid var(--separator); }
+.wb-file input[type='file'] { display: none; }
+.wb-textarea { width: 100%; min-height: 88px; }
+.wb-field { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-footnote); color: var(--muted); }
+.wb-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.wb-field-wide { grid-column: 1 / -1; }
+
+/* ----------------------------------------------------- the two pool sheets
+ * Packing a brick is a floating panel over the pool, not a screen of its own,
+ * so the pool stays visible behind it while the choice is made. The z values
+ * sit above the page and below the shell's own sheet (50/51).
+ *
+ * `[hidden]` is spelled out because the moment `display` is set on these two
+ * the attribute's own `display: none` stops winning, and a sheet that cannot
+ * close is worse than an unstyled one. */
+
+.wb-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.22);
+}
+.wb-sheet {
+  position: fixed;
+  top: var(--page-pad);
+  right: var(--page-pad);
+  bottom: var(--page-pad);
+  z-index: 41;
+  width: 560px;
+  max-width: calc(100vw - 2 * var(--page-pad));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--shadow-md);
+}
+/* The attribute has to keep winning. This file sets `display` on several of
+ * these - a rail list, a search field, a sheet - and `hidden` is not a
+ * suggestion: without this rule a hidden rail list comes back the moment it is
+ * given a display, and a sheet that cannot close is worse than an unstyled one.
+ * `.hidden` does the same job for the class, site-wide. */
+.wb-app [hidden] { display: none !important; }
+
+.wb-sheet-head { display: flex; align-items: center; gap: var(--space-3); }
+.wb-sheet-head h2 { margin: 0; font-size: var(--text-headline); font-weight: 600; letter-spacing: -0.012em; }
+.wb-sheet-head .btn { margin-left: auto; }
+.wb-sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-2);
+}
+.wb-sheet-actions .btn-primary { margin-left: auto; }
+
+.wb-pick-list { display: flex; flex-direction: column; gap: var(--space-1); }
+.wb-pick-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.wb-pick-row:hover { background: var(--surface-2); }
+.wb-pick-row input { flex: 0 0 auto; width: 20px; height: 20px; accent-color: var(--tint); }
+.wb-pick-word { min-width: 0; font-weight: 600; }
+
+.wb-set-row { display: grid; grid-template-columns: 5rem minmax(0, 1fr); align-items: center; gap: var(--space-3); }
+.wb-segmented-chips { flex-wrap: wrap; gap: var(--space-1); }
+.wb-segmented-chips .wb-seg { flex: 0 0 auto; font-size: var(--text-caption); }
+.wb-segmented-chips .wb-pick-row { flex: 0 0 auto; padding: var(--space-1) var(--space-2); }
+.wb-filter .wb-seg { font-size: var(--text-caption); }
+
+/* The river's own palette: 川 is a canvas world with its own look and is
+ * deliberately outside the state ladder. */
+.wb-river-word { position: absolute; transform: translate(-50%, -50%); }
+.wb-section { display: block; }
+.wb-bar-label { color: var(--muted); }
+
+/* The dictionary's sources: one row per dictionary, and the attribution it
+ * carries stays with it - JMdict's licence is not optional decoration. */
+.wb-source-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.wb-source-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 0.5px solid var(--separator);
+}
+.wb-source-main { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; font-weight: 600; }
+.wb-source-credit { margin-left: auto; text-align: right; }

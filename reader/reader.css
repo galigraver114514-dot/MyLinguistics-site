@@ -31,14 +31,6 @@
   --hl-hover: rgba(122, 92, 62, 0.16);
   --hl-note: rgba(96, 165, 250, 0.38);
   --hl-note-strong: rgba(96, 165, 250, 0.95);
-
-  /* One-release bridge, and the only reason it exists is one line over the
-   * boundary: reader/js/app.js:900 sets `note.style.color = 'var(--muted)'`.
-   * Renaming it here without that line would drop the note's colour to
-   * inherited - silently, and with no test to catch it. REQUEST sent; this
-   * line dies in the commit after agent-reader's. Until then it is also the
-   * name that collides with tokens.css once the reader is embedded. */
-  --muted: var(--page-muted);
 }
 
 html[data-page-theme='paper'], html[data-theme='paper'] { --page-bar: #efece5; --page-bg: #fbfaf6; --page-ink: #1d1b17; --page-muted: #6d675a; --page-rule: #ddd7ca; }
@@ -78,6 +70,50 @@ body {
 
 body.chrome-hidden #bar { opacity: 0; pointer-events: none; }
 body.chrome-hidden #foot { opacity: 0; pointer-events: none; }
+
+/* ------------------------------------------------------- the reading rail
+ *
+ * Where you are in the book, as a line rather than a sentence. The whole
+ * contract with reader/js/app.js is `--progress`, 0..1, written on #rail; how
+ * the fill is drawn is this file's business, which is why the reader never sets
+ * a width or a colour.
+ *
+ * The fill moves with `transform` so a page turn cannot trigger layout, and it
+ * grows from the **right** in vertical writing - vertical Japanese advances
+ * leftward, and a rail that grows the other way reads as going backwards. The
+ * stylesheet tells the two apart from #viewport's own class, so it needs no
+ * second attribute and no JavaScript. */
+#rail {
+  flex: 0 0 auto;
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  background: var(--page-rule);
+}
+#rail-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--tint);
+  transform: scaleX(var(--progress, 0));
+  transform-origin: left center;
+  transition: transform var(--motion-base) var(--ease-out);
+}
+#viewport.vertical ~ #rail #rail-fill { transform-origin: right center; }
+
+/* Embedded, the reader's own bar and footer are hidden, so the rail is the only
+ * thing left at the bottom edge and it goes there - clear of the home
+ * indicator, and nothing else: the shell's navigation floats at the top. */
+body.shell-embedded #rail {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--safe-bottom, 0px);
+  z-index: 20;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #rail-fill { transition: none; }
+}
 
 #book-title {
   flex: 1 1 auto;
@@ -429,7 +465,7 @@ body.shell-embedded #foot { display: none; }
 /* Keep the reader's bottom sheets clear of the tab bar rather than under it. */
 body.shell-embedded #dict,
 body.shell-embedded #select-bar {
-  bottom: calc(var(--tabbar-h, 0px) + var(--safe-bottom, 0px));
+  bottom: var(--safe-bottom, 0px);
 }
 /* .shell-content is the shell's measured box; the reading surface fills it.
    Applied only when embedded, so standalone layout is untouched. */

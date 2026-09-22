@@ -15,8 +15,11 @@ body.has-shell {
  * until the markup lands - so shell.js puts `has-capsule` on the body when it
  * finds one, and this reads the document instead of guessing at a version. */
 body.has-shell.has-capsule {
+  /* Named so a full-height page can subtract the reserve instead of repeating
+   * the expression: the capsule floats over the content, it does not push it. */
+  --shell-top: calc(var(--capsule-top) + var(--capsule-h) + var(--space-3));
   padding-bottom: 0;
-  padding-top: calc(var(--capsule-top) + var(--capsule-h) + var(--space-3));
+  padding-top: var(--shell-top);
 }
 
 /* -------------------------------------------------------- navigation bar */

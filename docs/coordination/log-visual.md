@@ -10,6 +10,93 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-23 - T3: the vocabulary app is styled, and the rail exists
+
+### 語彙: the layout, the wall, and the two sheets
+
+`assets/css/wordbook.css` now styles the app the IA commit laid down. The view
+grid is the interesting part: a view is the working column, a left rail where it
+has one, an optional right rail, and an **action bar under the working column**
+rather than beside the rails - so the rails span both rows instead of the bar
+being a third column. The rail's presence is read from the markup with `:has()`
+rather than hard-coded per view id, and `.hidden`'s `!important` keeps the
+visibility switching working.
+
+Colour is taken from the two attributes the engine already writes, in one place:
+
+    [data-pos]   verb / noun / greet / adv / expr / conj  ->  --pos
+    [data-phase] sealed / learning / review                ->  --depth
+
+That is the contract working exactly as designed. The rail's ten-cell glyph then
+costs one line - `color-mix(var(--pos), var(--depth))` - and **the count of
+cells is the brick's size**, because the engine is allowed to emit a short
+brick. The wall's cells are the constant 12% wash the board drew, with the word
+in the solid hue: at 100% a 復習中 course would be a slab of saturated colour
+wanting white text, and the words are the point.
+
+The two pool sheets (`選ぶ` / `設定`) are static markup that the engine fills.
+They are styled as floating panels over the pool - a scrim at z 40 and a 560px
+panel at z 41, under the shell's own sheet at 50/51 - so the pool stays visible
+while a brick is put together.
+
+### The trap that would have broken the app quietly
+
+**Setting `display` on an element that carries the `hidden` ATTRIBUTE wins over
+the attribute**, because the attribute's `display: none` lives in the user-agent
+stylesheet and any author rule outranks it. Four hidden things in this page
+would have come back: both sheets (unclosable), the two scope-block rail lists,
+and the 辞書 search field. One rule fixes the whole class of it inside the app:
+
+    .wb-app [hidden] { display: none !important; }
+
+`.hidden` already does this for the class site-wide; the attribute had no such
+guard. Worth knowing for any page that hides with the attribute.
+
+### Dead style, removed with evidence
+
+The passive view is gone, the in-page tab row is gone, and three older
+containers are gone, so fifteen rule blocks went with them: `.wb-tabs`,
+`.wb-tab.is-active`, six `.wb-digest-*`, six `.wb-table*`, three `.wb-manage*`.
+Checked before deleting: `wordbook.css` is loaded only by `study.html`,
+`tests/shell.test.js:56` actually asserts `wb-tab` must be absent, and nothing in
+any page or module mentions the rest.
+
+The check that found them is worth keeping: pull every class selector out of the
+stylesheet, pull every `wb-*` class out of the markup **and every JS module**
+(the first pass only read `entry.js` and missed the whole sheet vocabulary), and
+diff. It now reports zero dead and zero unstyled.
+
+### reader.css: the rail, and two exits
+
+- **`#rail` is drawn.** reader/js/app.js writes `--progress` and the aria values;
+  the fill is `transform: scaleX(var(--progress))`, so a page turn cannot
+  trigger layout, and it grows from the **right** in vertical writing because
+  vertical Japanese advances leftward. The stylesheet tells the two apart with
+  `#viewport.vertical ~ #rail`, so no second attribute was needed. Embedded,
+  `#bar` and `#foot` are hidden and the rail becomes the bottom edge, clear of
+  the home indicator only - the shell's navigation floats at the top now.
+- **The `--muted` bridge is deleted.** agent-reader moved
+  `reader/js/app.js` to `var(--page-muted)`, which was the exit condition I
+  wrote next to it, so `--muted` no longer exists in `reader.css`. That was the
+  last name shared with `tokens.css`.
+- **`#select-bar`'s `bottom`** dropped its `--tabbar-h` reserve. Standalone,
+  `--tabbar-h` was never defined (the reader loads no tokens), so it resolved to
+  0 and nothing changes; **embedded** it would have floated the selection bar
+  49px above a bottom bar that no longer exists.
+
+**`reader/reader.css` changed appearance, so it needs a `?v=` bump** by
+agent-reader per the rule in their log - it is currently `?v=13`.
+
+### Not mine, and now reproducible
+
+`tests/reader-page.test.js` **hangs** - not fails, hangs, and the whole suite
+times out - and it hung twice in a row while the file was being edited in the
+working tree. It also passed once in between, so it is a race rather than a
+deterministic break. Nothing I have written can cause it: no test reads a
+stylesheet except to assert the `<link>`, and my files are CSS plus `shell.js`.
+Left alone, per the protocol. `tests/wordbook-pool.test.js` (new, uncommitted)
+also fails one test for the same reason: it is mid-flight.
+
 ## 2026-09-22 - T2: the capsule is styled against agent-wordbook's markup, and two silent regressions are closed
 
 The markup arrived while I was working on it. agent-wordbook rewrote

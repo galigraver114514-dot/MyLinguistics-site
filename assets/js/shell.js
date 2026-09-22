@@ -20,22 +20,17 @@
     var path = window.location.pathname;
     if (path.indexOf('/reader/') >= 0) return 'reader';
     var file = path.split('/').pop() || 'index.html';
-    if (file === 'study.html') {
-      /* The capsule calls this section vocab; the tab bar it replaces called it
-       * learn. Ask the page which one it has rather than pick a version to be
-       * right about - both markups are in the tree for one release. */
-      return document.querySelector('.tabbar-item[data-tab="vocab"]') ? 'vocab' : 'learn';
-    }
+    if (file === 'study.html') return 'vocab';
     if (file === 'index.html') return 'home';
     return '';
   }
 
-  /* study.html is one page with four routes in the hash; a bare study.html
-   * lands on the wall, which is the first of the four. */
+  /* The routes are `#wall`, `#wall/review`, `#sea`, `#sea/bricks`. The capsule
+   * sub-item a route belongs to is its first segment - which is what
+   * CAPSULE_VIEW in entry.js says too - and a bare study.html is the wall. */
   function viewKey() {
-    var hash = window.location.hash || '';
-    if (hash === '#river' || hash === '#pool' || hash === '#sea') return hash.slice(1);
-    return 'wall';
+    var head = (window.location.hash || '').replace(/^#/, '').split('/')[0];
+    return head || 'wall';
   }
 
   function markActiveTab() {
