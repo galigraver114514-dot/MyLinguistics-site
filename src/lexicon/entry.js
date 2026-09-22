@@ -17,7 +17,7 @@ import { brickLabel as formatBrickLabel } from './brick-label.js';
 
 var state = {
   lex: null,
-  view: 'review',
+  view: 'brick',
   queue: [],
   index: 0,
   flipped: false,
@@ -67,6 +67,13 @@ var FALLBACK = {
   'wb.due.month': '{n}mo',
   'wb.due.year': '{n}y',
   'wb.tab.inbox': 'Inbox',
+  'wb.tab.brick': 'Brick',
+  'wb.tab.pool': 'Pool',
+  'wb.tab.bricks': 'Bricks',
+  'wb.tab.data': 'Data',
+  'wb.bricks.note': 'Ten words per brick.',
+  'wb.bricks.empty': 'No bricks yet.',
+  'wb.bricks.dissolve': 'Take apart',
   'wb.inbox.count': '{n} waiting',
   'wb.inbox.empty': 'Nothing waiting.',
   'wb.inbox.seen': '{n} sentences',
@@ -452,7 +459,7 @@ async function startReview() {
 }
 
 function flip() {
-  if (state.view !== 'review' || !currentCard() || state.lookOnly) return;
+  if (state.view !== 'brick' || !currentCard() || state.lookOnly) return;
   state.flipped = !state.flipped;
   renderCard();
   if (state.flipped) {
@@ -868,22 +875,79 @@ function toggleRiver() {
 
 /* ------------------------------------------------------------------- view */
 
+/* Two sections, hash-routed. Learn is the doing surface (brick, river,
+ * passive); Overview is the lexis (pool, bricks, lexicon, data). The bottom tab
+ * bar switches sections; the sub-tabs switch views inside one. */
+var VIEWS = {
+  brick: { section: 'learn', panel: 'wbReview' },
+  river: { section: 'learn', panel: 'wbRiver' },
+  passive: { section: 'learn', panel: 'wbDigest' },
+  pool: { section: 'overview', panel: 'wbInbox' },
+  bricks: { section: 'overview', panel: 'wbBricks' },
+  lexicon: { section: 'overview', panel: 'wbBrowse' },
+  data: { section: 'overview', panel: 'wbData' }
+};
+
 function setView(view) {
+  if (!VIEWS[view]) view = 'brick';
   state.view = view;
-  var views = { review: 'wbReview', digest: 'wbDigest', river: 'wbRiver', inbox: 'wbInbox', browse: 'wbBrowse' };
-  Object.keys(views).forEach(function (key) {
-    show(el(views[key]), key === view);
+  Object.keys(VIEWS).forEach(function (key) {
+    show(el(VIEWS[key].panel), key === view);
   });
   var tabs = document.querySelectorAll('.wb-tab');
   for (var i = 0; i < tabs.length; i += 1) {
     if (tabs[i].getAttribute('data-view') === view) tabs[i].classList.add('is-active');
     else tabs[i].classList.remove('is-active');
   }
-  if (view === 'digest') renderDigest();
-  if (view === 'inbox') renderInbox();
-  if (view === 'browse') renderBrowse();
+  if (view === 'passive') renderDigest();
+  if (view === 'pool') renderInbox();
+  if (view === 'bricks') renderBricks();
+  if (view === 'lexicon') renderBrowse();
   if (view === 'river') startRiver();
   else stopRiver();
+}
+
+/* The hash is the route: #learn or #overview. A section switch lands on that
+ * section's first view, so the two never show at once. */
+function route() {
+  var section = window.location.hash === '#overview' ? 'overview' : 'learn';
+  state.section = section;
+  var sections = document.querySelectorAll('.wb-section');
+  for (var i = 0; i < sections.length; i += 1) {
+    show(sections[i], sections[i].getAttribute('data-section') === section);
+  }
+  var current = VIEWS[state.view];
+  if (!current || current.section !== section) {
+    setView(section === 'overview' ? 'pool' : 'brick');
+  }
+}
+
+async function renderBricks() {
+  var list = el('wbBricksList');
+  if (!list) return;
+  var bricks = await state.lex.listBricks();
+  if (!bricks.length) {
+    list.innerHTML = '<p class="muted mb-0">' + esc(tText('wb.bricks.empty')) + '</p>';
+    return;
+  }
+  list.innerHTML = bricks.map(function (brick) {
+    var days = Math.max(0, Math.round(((brick.due || 0) - Date.now()) / 86400000));
+    var due = days <= 0 ? tText('overview.dueNow') : tText('overview.dueIn', { n: days });
+    return '<article class="wb-inbox-item">' +
+      '<div class="wb-inbox-head"><strong>' + esc(brickLabel(brick)) + '</strong>' +
+      '<span class="wb-inbox-seen">' + esc(tText('overview.brickSize', { n: brick.size })) + '</span></div>' +
+      '<p class="muted small mb-0">' + esc(tText('overview.phase.' + brick.phase)) + ' · ' + esc(due) + '</p>' +
+      '<div class="wb-inbox-actions">' +
+      '<button class="btn btn-ghost btn-small" type="button" data-brick-dissolve="' + esc(brick.id) + '">' + esc(tText('wb.bricks.dissolve')) + '</button>' +
+      '</div></article>';
+  }).join('');
+}
+
+async function dissolveBrick(id) {
+  await state.lex.dissolveBrick(id);
+  await refresh();
+  await renderBricks();
+  await renderInbox();
 }
 
 function bind() {
@@ -933,7 +997,7 @@ function bind() {
     });
   }
   document.addEventListener('keydown', function (event) {
-    if (state.view !== 'review') return;
+    if (state.view !== 'brick') return;
     if (event.code === 'Space') {
       event.preventDefault();
       if (state.lookOnly) nextLookOnly();
@@ -969,6 +1033,12 @@ function bind() {
     if (approve) approveCandidate(approve);
     else if (reject) rejectCandidate(reject);
   });
+  el('wbBricksList').addEventListener('click', function (event) {
+    var target = event.target;
+    var id = target && target.getAttribute ? target.getAttribute('data-brick-dissolve') : null;
+    if (id) dissolveBrick(id);
+  });
+  window.addEventListener('hashchange', route);
 }
 
 async function init() {
@@ -986,8 +1056,11 @@ async function init() {
     await state.lex.seedFromLegacy(window.ML_DATA ? window.ML_DATA.vocab : [], SEED_DEFS);
     await state.lex.enrichFromDictionary(state.dictionary);
     await refresh();
+    var activeTab = document.querySelector('.wb-tab.is-active');
+    state.view = activeTab ? activeTab.getAttribute('data-view') : 'brick';
     await startReview();
     bind();
+    route();
   } catch (err) {
     var main = document.querySelector('main');
     if (main) {

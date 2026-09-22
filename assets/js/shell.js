@@ -16,7 +16,7 @@
     var path = window.location.pathname;
     if (path.indexOf('/reader/') >= 0) return 'reader';
     var file = path.split('/').pop() || 'index.html';
-    if (file === 'study.html') return 'learn';
+    if (file === 'study.html') return window.location.hash === '#overview' ? 'overview' : 'learn';
     if (file === 'overview.html') return 'overview';
     return '';
   }
@@ -205,6 +205,7 @@
   function init() {
     markShell();
     markActiveTab();
+    window.addEventListener('hashchange', markActiveTab);
     collapseTitle();
     wireMore();
     wireReader();

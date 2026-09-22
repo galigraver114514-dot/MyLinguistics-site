@@ -69,24 +69,24 @@ large-title navigation bar, and bottom sheets. `Home` and `About` sit in the
 bar's `more` sheet. Adding the app to the iPad home screen launches it
 fullscreen, with no browser chrome.
 
-`study.html` is the Learn tab and, until P3, the whole study surface.
+`study.html` holds both sections; the bottom tab bar switches them.
 
-- **Review** schedules each sense with FSRS-6, recognition before production.
-  A **Look only** toggle shows every answer and advances without grading.
-- **Passive** is a context-rich digest you only read. It grows a decaying
-  familiarity score and never writes into the FSRS schedule.
-- **River** is a vertical field of words: columns in tategaki, falling from the
-  top. Drag the rod and the first word the hook touches goes into the pool,
-  where it is carded automatically. No grading and no sentences.
-- **Inbox** holds mined candidates. Approve one to author its cards, or ignore
-  it to retire it. The same panel captures a word by hand.
-- **Browse** lists the lexicon with recognition and card state.
-- **Bricks** - the Inbox has an *Enrol* action that cards every candidate and
-  packs the pool into ten-word bricks; Review then studies a brick as one
-  session of ten cards. The **Overview** tab shows the pool and the bricks.
-- **Manage data** mines pasted text or a file, imports a frequency list (a word
-  and a rank per line, either order), imports a Yomitan dictionary, and exports
-  or restores a JSON backup.
+- **Learn** (`study.html#learn`) is the doing surface.
+  - **Brick** schedules ten-word bricks with FSRS-6, recognition before
+    production. A **Look only** toggle shows every answer and advances without
+    grading.
+  - **River** is a vertical field of words in tategaki. Drag the rod and the
+    first word the hook touches goes into the pool.
+  - **Passive** is a context-rich digest you only read. It grows a decaying
+    familiarity score and never writes into the FSRS schedule.
+- **Overview** (`study.html#overview`) is the lexis.
+  - **Pool** holds every captured word. *Enrol* cards them and packs ten-word
+    bricks, and the same panel captures a word by hand.
+  - **Bricks** lists the bricks with their phase and next due date.
+  - **Lexicon** lists every word with recognition and card state.
+  - **Data** mines pasted text or a file, imports a frequency list (a word and a
+    rank per line, either order), imports a Yomitan dictionary, and exports or
+    restores a JSON backup.
 - Definitions come from the shared dictionary module (`src/dict`): import a
   Yomitan JP-JP dictionary and mined or captured words take their definition
   from it. The seeded words keep the built-in monolingual glosses in

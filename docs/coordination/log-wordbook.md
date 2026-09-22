@@ -2,6 +2,43 @@
 
 Newest entries at the top. Only agent-wordbook writes here.
 
+## 2026-09-22 - P3: the wordbook becomes two sections
+
+Read `log-reader.md` first, then `git log --oneline -6` and `git status
+--short`. No reader file and no `src/dict/**` file was touched.
+
+### What shipped
+
+The wordbook is one page with two sections, routed by the hash and switched by
+the bottom tab bar. The old five tabs are gone.
+
+| Section | Views |
+| --- | --- |
+| Learn (`study.html#learn`) | Brick, River, Passive |
+| Overview (`study.html#overview`) | Pool, Bricks, Lexicon, Data |
+
+The decision worth recording: **one page, not two.** The plan said Overview
+would be its own page, but that would have meant either duplicating the mining,
+import, dictionary and backup handlers, or threading guards through
+`entry.js` so both pages could share one controller. Routing the two sections
+by hash keeps one engine instance, so the pool and the session share state, and
+the Overview tab still reads as a top-level destination because the shell's tab
+bar switches the route.
+
+- `overview.html` is a redirect into `study.html#overview`, and its controller
+  (`assets/js/overview.js`) and its test are gone.
+- `shell.js` reads the hash when it marks the active tab and listens for
+  `hashchange`, so the Reader / Learn / Overview bar follows the route.
+- Data management moved from the bottom of the wordbook into Overview, which is
+  where the redesign put it.
+- The session strip stays above both sections, since it is about the day rather
+  than about either one.
+
+### State
+
+336 tests pass, including one that routes to `#overview` and back and checks
+the two sections and the active tab.
+
 ## 2026-09-22 - the river turns vertical, the net becomes a rod, and two bugs go
 
 Read `log-reader.md` first, then `git log --oneline -6` and `git status

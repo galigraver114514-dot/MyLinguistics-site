@@ -1,6 +1,6 @@
 # iPad-first redesign: the iOS shell and the brick model
 
-Status: **decisions locked; P0 (the iOS shell), P1 (the pool and the bricks) and P2 (the river and the net) are implemented.** This supersedes the page and
+Status: **decisions locked; P0 to P3 are implemented.** This supersedes the page and
 navigation parts of `ja-vocab-book-design.md`. The engine described there -
 schema, FSRS-6, passive track, mining funnel, shared dictionary - is reused
 unchanged.
@@ -45,7 +45,7 @@ The default landing surface and the only place learning happens.
 
 - The current **brick** (ten words): the day's learning and review, assembled
   automatically.
-- The **word river** with the **net** below it.
+- The **word river** with the **rod** below it.
 - A persistent session strip: bricks due today, words in the pool, recognition.
 
 ### Overview (总览)
@@ -138,7 +138,7 @@ pacing layer on top:
 | P0 | iOS shell and design system: tab bar, nav bar, sheets, tokens. No engine change; the suite stays green. **Done.** |
 | P1 | Pool and bricks: data model, bricking algorithm, brick session. DB version 3. **Done.** |
 | P2 | River and net: canvas flow, drag-to-cast, catch into the pool. **Done.** |
-| P3 | The two sections: Learn and Overview; the old five tabs are demoted. |
+| P3 | The two sections: Learn and Overview; the old five tabs are demoted. **Done.** |
 | P4 | PWA polish: home-screen fullscreen, motion, empty and error states, touch detail. |
 
 ### P0, as built
@@ -201,7 +201,23 @@ including when the word was already in the pool.
 
 The river's food is three sources: the learner's own lexicon (whose items carry
 a sense, so they keep their schedule), the captured pool (the unknown words the
-net is for), and a dictionary sample.
+rod is for), and a dictionary sample.
+
+### P3, as built
+
+The wordbook is one page with two sections, routed by the hash and switched by
+the bottom tab bar. The old five tabs are gone.
+
+| Section | Views |
+| --- | --- |
+| Learn (`study.html#learn`) | Brick, River, Passive |
+| Overview (`study.html#overview`) | Pool, Bricks, Lexicon, Data |
+
+`overview.html` is a redirect into `#overview`, and its separate controller is
+gone: one page means one engine instance, so the pool, the bricks and the data
+tools share state with the session instead of reloading it. The session strip
+(words, due, new, recognition) sits above both sections. Data management moved
+from the bottom of the wordbook into Overview, where the redesign put it.
 
 The reader boundary is `docs/coordination/interface-shell.md`, proposed by
 agent-reader. The shell sets `document.documentElement.dataset.shell = 'on'`
