@@ -21,12 +21,17 @@ import { contentTokens, splitSentences } from '../dict/tokenize.js';
 import { selectCandidates } from './select.js';
 import { parseFrequencyList } from './frequency.js';
 import { modesForSense, definitionFromEntry } from './authoring.js';
+import { formBricks, nextBrickState, MAX_AGAIN } from './brick.js';
 
 export const SETTINGS = Object.freeze({
   newPerSession: 12,
   desiredRetention: 0.9,
   digestPerDay: 20,
-  band: { lo: 12000, hi: 40000 }
+  band: { lo: 12000, hi: 40000 },
+  /* A brick is exactly this many words, and it retires once every card in it
+   * has reached this stability in days. */
+  brickSize: 10,
+  brickRetire: 21
 });
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -42,6 +47,16 @@ const MODE_ORDER = {
   collocation: 7,
   register: 8
 };
+
+/* A capture source can be a string or a small descriptor. Only the label is
+ * kept, because that is all bricking needs. */
+function sourceLabel(source) {
+  if (!source) return null;
+  if (typeof source === 'string') return source;
+  if (source.title) return String(source.title);
+  if (source.kind) return String(source.kind);
+  return null;
+}
 
 export class Lexicon {
   constructor(db, options) {
@@ -264,6 +279,8 @@ export class Lexicon {
       review: reviews.length,
       mature: mature.length,
       inbox: encounters.filter(function (e) { return e.state === 'inbox'; }).length,
+      pool: encounters.filter(function (e) { return e.state === 'carded'; }).length,
+      bricks: (await this.listBricks()).filter(function (b) { return b.phase !== 'retired'; }).length,
       exposuresToday: exposures.filter(function (e) { return e.ts >= start.getTime(); }).length,
       recognition: senses.length ? Math.round(familiaritySum / senses.length * 100) : 0
     };
@@ -559,11 +576,13 @@ export class Lexicon {
     var cards = Array.isArray(data.cards) ? data.cards : [];
     var encounters = Array.isArray(data.encounters) ? data.encounters : [];
     var exposures = Array.isArray(data.exposures) ? data.exposures : [];
+    var bricks = Array.isArray(data.bricks) ? data.bricks : [];
     await idb.putAll(this.db, STORES.words, words);
     await idb.putAll(this.db, STORES.senses, senses);
     await idb.putAll(this.db, STORES.cards, cards);
     await idb.putAll(this.db, STORES.encounters, encounters);
     await idb.putAll(this.db, STORES.exposures, exposures);
+    await idb.putAll(this.db, STORES.bricks, bricks);
     if (Array.isArray(data.frequency)) {
       await idb.putAll(this.db, STORES.frequency, data.frequency);
     }
@@ -571,6 +590,257 @@ export class Lexicon {
       await this.setIgnore(data.ignore);
     }
     return { words: words.length, senses: senses.length, cards: cards.length };
+  }
+
+  /* --------------------------------------------------------- pool, bricks
+   *
+   * The pool is the encounter table: a captured word sits there with its
+   * provenance and state until it is carded, then bricked. A brick is ten
+   * words and is the unit of learning and review.
+   */
+
+  async listBricks() { return idb.all(this.db, STORES.bricks); }
+
+  async getBrick(brickIdValue) { return idb.get(this.db, STORES.bricks, brickIdValue); }
+
+  /* Everything captured, whatever state it is in. */
+  async listPool() {
+    var encounters = await this.listEncounters();
+    return encounters.filter(function (record) { return record.state !== 'new'; });
+  }
+
+  /* Put one captured word in the pool. An unknown word gets its cards at once;
+   * a word already in the lexicon is only marked known, never duplicated. */
+  async addToPool(entry, options) {
+    var opts = options || {};
+    var now = opts.now || Date.now();
+    var lemma = normalizeKey(entry && entry.wordKey);
+    if (!lemma) return null;
+
+    var words = await this.listWords();
+    var word = null;
+    for (var i = 0; i < words.length; i += 1) {
+      if (words[i].lemma === lemma) { word = words[i]; break; }
+    }
+
+    var record = await idb.get(this.db, STORES.encounters, lemma);
+    if (!record) record = { wordKey: lemma, count: 0, contexts: [], state: 'new' };
+    record.count = Math.max(record.count || 0, entry.count || 1);
+    if (entry.sentence) {
+      var contexts = record.contexts || [];
+      var seen = contexts.some(function (c) { return c.ja === entry.sentence; });
+      if (!seen) contexts = contexts.concat([{ ja: entry.sentence, source: opts.source || null, ts: now }]).slice(-10);
+      record.contexts = contexts;
+    }
+    if (entry.rank) record.rank = entry.rank;
+    record.firstSeen = record.firstSeen || now;
+    record.lastSeen = now;
+
+    if (record.state === 'dismissed') {
+      await idb.put(this.db, STORES.encounters, record);
+      return { wordKey: lemma, state: 'dismissed', cards: 0 };
+    }
+    if (word) {
+      record.state = 'known';
+      await idb.put(this.db, STORES.encounters, record);
+      return { wordKey: lemma, state: 'known', cards: 0 };
+    }
+
+    var created = await this.approveCandidate(lemma, {
+      reading: entry.reading,
+      definition: entry.definition,
+      sentence: entry.sentence || (record.contexts && record.contexts[0] ? record.contexts[0].ja : null),
+      pos: entry.pos,
+      dictionary: opts.dictionary,
+      now: now
+    });
+    record.state = 'carded';
+    await idb.put(this.db, STORES.encounters, record);
+    return { wordKey: lemma, state: 'carded', cards: created ? created.cards.length : 0 };
+  }
+
+  /* Automatic enrolment: every inbox candidate becomes cards, then the pool is
+   * packed into bricks. This is the mechanical path the redesign asks for. */
+  async enrol(options) {
+    var opts = options || {};
+    var now = opts.now || Date.now();
+    var encounters = await this.listEncounters();
+    var pending = encounters.filter(function (record) {
+      return record.state === 'inbox' || (opts.includeNew && record.state === 'new');
+    });
+    if (opts.limit) pending = pending.slice(0, opts.limit);
+    var carded = 0;
+    for (var i = 0; i < pending.length; i += 1) {
+      var record = pending[i];
+      var context = record.contexts && record.contexts[0] ? record.contexts[0] : null;
+      var result = await this.addToPool({
+        wordKey: record.wordKey,
+        count: record.count,
+        rank: record.rank,
+        sentence: context ? context.ja : null
+      }, { now: now, dictionary: opts.dictionary, source: context ? context.source : null });
+      if (result && result.state === 'carded') carded += 1;
+    }
+    var built = await this.buildBricks({ now: now, partial: !!opts.partial });
+    return { enrolled: pending.length, carded: carded, bricks: built.length, built: built };
+  }
+
+  /* Pack the carded pool into bricks. Words already in a brick are skipped, so
+   * this is safe to run after every import. */
+  async buildBricks(options) {
+    var opts = options || {};
+    var now = opts.now || Date.now();
+    var size = opts.size || SETTINGS.brickSize;
+    var bricks = await this.listBricks();
+    var bricked = {};
+    bricks.forEach(function (brick) {
+      (brick.wordKeys || []).forEach(function (key) { bricked[key] = true; });
+    });
+
+    var encounters = await this.listEncounters();
+    var pool = [];
+    encounters.forEach(function (record) {
+      if (record.state !== 'carded') return;
+      if (bricked[record.wordKey]) return;
+      var context = record.contexts && record.contexts[0] ? record.contexts[0] : null;
+      pool.push({
+        wordKey: record.wordKey,
+        rank: record.rank || null,
+        pos: null,
+        source: sourceLabel(context ? context.source : null),
+        firstSeen: record.firstSeen || 0
+      });
+    });
+
+    var drafts = formBricks(pool, { size: size, band: this.band, partial: !!opts.partial });
+    var senses = await this.listSenses();
+    var created = [];
+    for (var i = 0; i < drafts.length; i += 1) {
+      var draft = drafts[i];
+      var senseIds = [];
+      var wordKeys = [];
+      for (var j = 0; j < draft.entries.length; j += 1) {
+        var key = draft.entries[j].wordKey;
+        wordKeys.push(key);
+        var id = wordId(key);
+        for (var s = 0; s < senses.length; s += 1) {
+          if (senses[s].wordId === id) senseIds.push(senses[s].id);
+        }
+      }
+      var brick = {
+        id: 'brick:' + now.toString(36) + '-' + (bricks.length + created.length + 1),
+        group: draft.group,
+        wordKeys: wordKeys,
+        senseIds: senseIds,
+        size: draft.entries.length,
+        phase: 'sealed',
+        due: now,
+        createdAt: now,
+        sessions: 0,
+        partial: !!draft.partial
+      };
+      await idb.put(this.db, STORES.bricks, brick);
+      var touched = [];
+      for (var k = 0; k < wordKeys.length; k += 1) {
+        var record = await idb.get(this.db, STORES.encounters, wordKeys[k]);
+        if (!record) continue;
+        record.state = 'bricked';
+        record.brickId = brick.id;
+        touched.push(record);
+      }
+      await idb.putAll(this.db, STORES.encounters, touched);
+      created.push(brick);
+    }
+    return created;
+  }
+
+  /* The next brick to study: a sealed one first, then an overdue one. */
+  async nextBrick(now) {
+    var time = now || Date.now();
+    var bricks = await this.listBricks();
+    var open = bricks.filter(function (brick) { return brick.phase !== 'retired'; });
+    if (!open.length) return null;
+    open.sort(function (a, b) {
+      var sa = a.phase === 'sealed' ? 0 : 1;
+      var sb = b.phase === 'sealed' ? 0 : 1;
+      if (sa !== sb) return sa - sb;
+      return (a.due || 0) - (b.due || 0);
+    });
+    var first = open[0];
+    if (first.phase === 'sealed') return first;
+    return (first.due || 0) <= time ? first : null;
+  }
+
+  /* One card per word per sitting: the lowest-mode card that is due, or the
+   * recognition card when nothing is due yet. A brick stays at ten cards while
+   * the output modes still rotate across sessions. */
+  async brickQueue(brickIdValue, now) {
+    var time = now || Date.now();
+    var brick = await idb.get(this.db, STORES.bricks, brickIdValue);
+    if (!brick) return [];
+    var cards = await this.listCards();
+    var bySense = {};
+    cards.forEach(function (card) {
+      if ((brick.senseIds || []).indexOf(card.senseId) < 0) return;
+      if (!bySense[card.senseId]) bySense[card.senseId] = [];
+      bySense[card.senseId].push(card);
+    });
+    var queue = [];
+    (brick.senseIds || []).forEach(function (sid) {
+      var list = (bySense[sid] || []).slice().sort(function (a, b) {
+        var ma = MODE_ORDER[a.mode] == null ? 9 : MODE_ORDER[a.mode];
+        var mb = MODE_ORDER[b.mode] == null ? 9 : MODE_ORDER[b.mode];
+        return ma - mb;
+      });
+      var due = list.filter(function (card) { return card.srs.phase !== 'new' && (card.srs.due || 0) <= time; });
+      var fresh = list.filter(function (card) { return card.srs.phase === 'new'; });
+      var pick = due[0] || fresh[0] || list[0];
+      if (pick) queue.push(pick);
+    });
+    return queue;
+  }
+
+  /* Finish a brick session. The cards already hold their FSRS schedules; this
+   * adds the pacing layer on top of them. */
+  async paceBrick(brickIdValue, options) {
+    var opts = options || {};
+    var now = opts.now || Date.now();
+    var brick = await idb.get(this.db, STORES.bricks, brickIdValue);
+    if (!brick) return null;
+    var cards = await this.listCards();
+    var mine = cards.filter(function (card) {
+      return (brick.senseIds || []).indexOf(card.senseId) >= 0;
+    });
+    var state = nextBrickState(mine, {
+      now: now,
+      agains: opts.agains || 0,
+      retireStability: SETTINGS.brickRetire,
+      maxAgain: MAX_AGAIN
+    });
+    brick.due = state.due;
+    brick.phase = state.phase;
+    brick.sessions = (brick.sessions || 0) + 1;
+    brick.lastStudiedAt = now;
+    await idb.put(this.db, STORES.bricks, brick);
+    return brick;
+  }
+
+  /* Take a brick apart: its words go back to the pool. */
+  async dissolveBrick(brickIdValue) {
+    var brick = await idb.get(this.db, STORES.bricks, brickIdValue);
+    if (!brick) return null;
+    var touched = [];
+    var keys = brick.wordKeys || [];
+    for (var i = 0; i < keys.length; i += 1) {
+      var record = await idb.get(this.db, STORES.encounters, keys[i]);
+      if (!record) continue;
+      record.state = 'carded';
+      delete record.brickId;
+      touched.push(record);
+    }
+    await idb.putAll(this.db, STORES.encounters, touched);
+    await idb.remove(this.db, STORES.bricks, brickIdValue);
+    return brick;
   }
 
   async exportAll() {
@@ -583,14 +853,15 @@ export class Lexicon {
       encounters: await this.listEncounters(),
       exposures: await this.listExposures(),
       frequency: await this.listFrequency(),
-      ignore: await this.ignoreList()
+      ignore: await this.ignoreList(),
+      bricks: await this.listBricks()
     };
   }
 
   async reset() {
     var stores = [
       STORES.words, STORES.senses, STORES.cards, STORES.encounters,
-      STORES.exposures, STORES.frequency, STORES.meta
+      STORES.exposures, STORES.frequency, STORES.bricks, STORES.meta
     ];
     for (var i = 0; i < stores.length; i++) {
       await idb.clear(this.db, stores[i]);

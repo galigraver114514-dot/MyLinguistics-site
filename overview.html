@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Overview - MyLinguistics</title>
+<meta name="description" content="The word pool and the bricks.">
 <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="MyLinguistics">
-<title>Overview - MyLinguistics</title>
-<meta name="description" content="The word pool, brick progress, and data tools.">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -50,21 +50,34 @@
 
   <section class="section">
     <div class="container">
+      <div class="wb-review-top">
+        <span class="pill pill-accent" id="ovPoolCount">0</span>
+        <span class="pill" id="ovBrickCount">0</span>
+        <span class="pill" id="ovDueCount">0</span>
+      </div>
+
       <div class="panel">
         <h2 class="panel-title" data-i18n="overview.pool">Word pool</h2>
-        <p class="muted mb-0" data-i18n="overview.building">Coming in the next phases: the word pool (P1), bricks (P1), and the data tools (P3).</p>
+        <div id="ovPool"></div>
       </div>
+
+      <div class="panel">
+        <h2 class="panel-title" data-i18n="overview.bricks">Bricks</h2>
+        <div class="row-actions">
+          <button class="btn btn-primary btn-small" id="ovBuild" type="button" data-i18n="overview.build">Build bricks</button>
+        </div>
+        <div id="ovBricks"></div>
+      </div>
+
       <div class="panel">
         <h2 class="panel-title" data-i18n="overview.data">Data</h2>
-        <p class="muted" data-i18n="overview.dataNote">Mining, frequency lists, dictionaries, and backup stay on the wordbook page until the overview is built.</p>
-        <div class="row-actions">
-          <a class="btn btn-secondary" href="study.html" data-i18n="home.cta.study">Open the wordbook</a>
-        </div>
+        <p class="muted mb-0" data-i18n="overview.dataNote">Mining, frequency lists, dictionaries, and backup stay on the wordbook page until the overview is built.</p>
       </div>
     </div>
   </section>
 
 </main>
+
 <nav class="tabbar" id="tabbar" aria-label="Main navigation">
   <a class="tabbar-item" href="reader/index.html" data-tab="reader">
     <svg class="tabbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M13 3h4.5A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5H13z"/></svg>
@@ -79,9 +92,11 @@
     <span class="tabbar-label" data-i18n="nav.overview">Overview</span>
   </a>
 </nav>
+
 <script src="assets/js/i18n.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/shell.js"></script>
+<script type="module" src="assets/js/overview.js"></script>
 <footer class="site-footer">
   <div class="container footer-inner">
     <p data-i18n="footer.tagline">MyLinguistics</p>

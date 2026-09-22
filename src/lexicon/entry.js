@@ -13,6 +13,7 @@ import { SEED_DEFS } from './seed-ja.js';
 import { schedule } from './srs.js';
 import { isOutputMode } from './schema.js';
 import { collectRiverPool } from './river-pool.js';
+import { brickLabel as formatBrickLabel } from './brick-label.js';
 
 var state = {
   lex: null,
@@ -30,7 +31,11 @@ var state = {
   browseFilter: '',
   lookOnly: false,
   dictionary: null,
-  dictCount: 0
+  dictCount: 0,
+  brick: null,
+  sessionAgains: 0,
+  brickPaced: false,
+  brickResult: null
 };
 
 /* English fallbacks keep the engine usable when loaded without the site runtime
@@ -90,7 +95,19 @@ var FALLBACK = {
   'wb.dict.imported': '{n} entries imported.',
   'wb.dict.failed': 'That dictionary could not be imported.',
   'wb.dict.removed': 'Imported dictionaries removed.',
-  'wb.dict.unavailable': 'The dictionary module is not available.'
+  'wb.dict.unavailable': 'The dictionary module is not available.',
+  'wb.inbox.bricks': '{n} bricks',
+  'wb.enrol': 'Enrol and build bricks',
+  'wb.enrol.result': '{carded} cards, {bricks} bricks.',
+  'wb.brick.chip': 'Brick {name} · {n} words',
+  'wb.brick.source': 'Source',
+  'wb.brick.common': 'Common',
+  'wb.brick.mid': 'Mid band',
+  'wb.brick.rare': 'Rare',
+  'wb.brick.unknown': 'Ungraded',
+  'wb.brick.mixed': 'Mixed',
+  'wb.brick.done': 'Brick {name} done',
+  'wb.brick.doneNote': '{n} cards were marked Again.'
 };
 
 function formatDue(ms) {
@@ -138,6 +155,11 @@ function percent(fraction) {
   if (!fraction || fraction < 0) return 0;
   if (fraction > 1) return 100;
   return Math.round(fraction * 100);
+}
+
+/* A brick group is structured data, so the interface makes the name. */
+function brickLabel(brick) {
+  return formatBrickLabel(brick, tText);
 }
 
 /* One label per card mode. Older builds only knew recognition and output; an
@@ -301,6 +323,15 @@ function renderCard() {
     show(doneNode, true);
     el('wbCounter').textContent = '0 / 0';
     el('wbProgress').style.width = '100%';
+    var emptyChip = el('wbBrickChip');
+    if (emptyChip) show(emptyChip, false);
+    if (state.brick && state.brickResult) {
+      el('wbDoneTitle').textContent = tText('wb.brick.done', { name: brickLabel(state.brick) });
+      el('wbDoneNote').textContent = tText('wb.brick.doneNote', { n: state.brickResult.agains });
+    } else {
+      el('wbDoneTitle').textContent = tText('wb.done.title');
+      el('wbDoneNote').textContent = tText('wb.done.note');
+    }
     return;
   }
 
@@ -321,6 +352,14 @@ function renderCard() {
   el('wbCounter').textContent = (state.index + 1) + ' / ' + state.queue.length;
   el('wbProgress').style.width = Math.round((state.index / state.queue.length) * 100) + '%';
   el('wbModeLabel').textContent = modeLabel(mode);
+
+  var brickChip = el('wbBrickChip');
+  if (brickChip) {
+    show(brickChip, !!state.brick);
+    brickChip.textContent = state.brick
+      ? tText('wb.brick.chip', { name: brickLabel(state.brick), n: state.brick.size })
+      : '';
+  }
 
   if (isOutput) {
     el('wbPrompt').textContent = flipped ? word.lemma : (definition.text || word.lemma);
@@ -388,9 +427,21 @@ function compareAnswer(typed, answer) {
   return tText('wb.match.diff', { a: value, b: expected });
 }
 
+/* Review is brick-first: if a brick is sealed or due, its ten words are the
+ * session. Only when no brick is waiting does the flat card queue take over,
+ * which is also what keeps a fresh install usable before any brick exists. */
 async function startReview() {
-  var queue = await state.lex.queue(Date.now(), SETTINGS.newPerSession);
-  state.queue = queue.due.concat(queue.fresh);
+  var now = Date.now();
+  state.brick = await state.lex.nextBrick(now);
+  state.sessionAgains = 0;
+  state.brickPaced = false;
+  state.brickResult = null;
+  if (state.brick) {
+    state.queue = await state.lex.brickQueue(state.brick.id, now);
+  } else {
+    var queue = await state.lex.queue(now, SETTINGS.newPerSession);
+    state.queue = queue.due.concat(queue.fresh);
+  }
   state.index = 0;
   state.flipped = false;
   renderCard();
@@ -410,10 +461,23 @@ async function grade(rating) {
   var card = currentCard();
   if (!card || !state.flipped) return;
   await state.lex.grade(card.id, rating, Date.now());
+  if (rating === 1) state.sessionAgains += 1;
   state.index += 1;
   state.flipped = false;
   await refresh();
+  if (!currentCard() && state.brick) await finishBrick();
   renderCard();
+}
+
+/* The cards already hold their FSRS schedules; this adds the brick's pacing on
+ * top, and three or more Again ratings pull the whole brick forward. */
+async function finishBrick() {
+  if (!state.brick || state.brickPaced) return;
+  state.brickPaced = true;
+  var agains = state.sessionAgains;
+  state.brickResult = { agains: agains };
+  await state.lex.paceBrick(state.brick.id, { agains: agains, now: Date.now() });
+  await refresh();
 }
 
 /* Look-only review: the answer is always visible and the card advances by
@@ -432,6 +496,7 @@ async function nextLookOnly() {
   state.index += 1;
   state.flipped = false;
   await refresh();
+  if (!currentCard() && state.brick) await finishBrick();
   renderCard();
 }
 
@@ -486,6 +551,8 @@ async function renderInbox() {
   state.inbox = await state.lex.listInbox();
   var count = el('wbInboxCount');
   if (count) count.textContent = tText('wb.inbox.count', { n: state.inbox.length });
+  var brickCount = el('wbBrickCount');
+  if (brickCount) brickCount.textContent = tText('wb.inbox.bricks', { n: state.stats ? (state.stats.bricks || 0) : 0 });
   var list = el('wbInboxList');
   if (!list) return;
   if (!state.inbox.length) {
@@ -520,6 +587,20 @@ async function approveCandidate(wordKey) {
 async function rejectCandidate(wordKey) {
   await state.lex.rejectCandidate(wordKey);
   await renderInbox();
+}
+
+/* Automatic enrolment: every inbox candidate becomes cards, then the pool is
+ * packed into bricks of ten. Nothing here is filed by hand. */
+async function enrolCandidates() {
+  var result = await state.lex.enrol({ dictionary: state.dictionary });
+  var note = el('wbInboxNote');
+  if (note) {
+    note.textContent = tText('wb.enrol.result', { carded: result.carded, bricks: result.bricks });
+    show(note, true);
+  }
+  await refresh();
+  await renderInbox();
+  await startReview();
 }
 
 async function mineAdd() {
@@ -636,6 +717,10 @@ async function resetAll() {
   state.digestSeen = {};
   state.inbox = [];
   state.lookOnly = false;
+  state.brick = null;
+  state.brickPaced = false;
+  state.brickResult = null;
+  state.sessionAgains = 0;
   await state.lex.seedFromLegacy(window.ML_DATA ? window.ML_DATA.vocab : [], SEED_DEFS);
   await refresh();
   await startReview();
@@ -792,6 +877,7 @@ function bind() {
   el('wbLookOnly').addEventListener('click', toggleLookOnly);
   el('wbNext').addEventListener('click', nextLookOnly);
   el('wbInboxRefresh').addEventListener('click', renderInbox);
+  el('wbEnrol').addEventListener('click', enrolCandidates);
   el('wbMineAdd').addEventListener('click', mineAdd);
   el('wbImportRun').addEventListener('click', runImport);
   el('wbFreqRun').addEventListener('click', runFrequency);

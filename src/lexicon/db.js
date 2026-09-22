@@ -1,14 +1,14 @@
 /* IndexedDB access for the lexicon.
  *
- * Six stores: words, senses, cards, encounters, exposures, meta.
- * Everything is promise-wrapped so callers can await; there is no callback
- * style anywhere else in the module.
+ * Seven stores: words, senses, cards, encounters, exposures, frequency, bricks,
+ * plus meta. Everything is promise-wrapped so callers can await; there is no
+ * callback style anywhere else in the module.
  */
 
 export const DB_NAME = 'ml-lexicon';
-/* 2 added the frequency store. The upgrade is additive, so a database created
- * by version 1 keeps every word, card shows, and exposure. */
-export const DB_VERSION = 2;
+/* Every upgrade is additive, so an older database keeps every word, card
+ * schedule, and exposure: 2 added frequency, 3 added bricks. */
+export const DB_VERSION = 3;
 
 export const STORES = Object.freeze({
   words: 'words',
@@ -17,6 +17,7 @@ export const STORES = Object.freeze({
   encounters: 'encounters',
   exposures: 'exposures',
   frequency: 'frequency',
+  bricks: 'bricks',
   meta: 'meta'
 });
 
@@ -51,6 +52,11 @@ export function openDb(factory) {
       }
       if (!names.contains(STORES.frequency)) {
         db.createObjectStore(STORES.frequency, { keyPath: 'lemma' });
+      }
+      if (!names.contains(STORES.bricks)) {
+        var bricks = db.createObjectStore(STORES.bricks, { keyPath: 'id' });
+        bricks.createIndex('due', 'due', { unique: false });
+        bricks.createIndex('phase', 'phase', { unique: false });
       }
       if (!names.contains(STORES.meta)) {
         db.createObjectStore(STORES.meta, { keyPath: 'key' });

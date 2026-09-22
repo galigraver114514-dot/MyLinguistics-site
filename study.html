@@ -66,6 +66,7 @@
         <div class="wb-review-top">
           <span class="pill pill-accent" id="wbCounter">0 / 0</span>
           <span class="pill" id="wbModeLabel">-</span>
+          <span class="pill pill-accent hidden" id="wbBrickChip"></span>
           <span class="muted small" data-i18n="wb.hint">Space flips, 1-4 grades</span>
           <button class="btn btn-ghost btn-small" id="wbLookOnly" type="button" aria-pressed="false" data-i18n="wb.lookOnly">Look only</button>
           <span class="muted small hidden" id="wbLookNote"></span>
@@ -91,8 +92,8 @@
           <button class="btn btn-ghost" id="wbFlip" type="button" data-i18n="wb.flip">Flip</button>
         </div>
         <div class="wb-done hidden" id="wbDone">
-          <h2 class="panel-title" data-i18n="wb.done.title">All caught up</h2>
-          <p class="muted mb-0" data-i18n="wb.done.note">Nothing is due.</p>
+          <h2 class="panel-title" id="wbDoneTitle" data-i18n="wb.done.title">All caught up</h2>
+          <p class="muted mb-0" id="wbDoneNote" data-i18n="wb.done.note">Nothing is due.</p>
         </div>
       </div>
 
@@ -108,7 +109,9 @@
       <div class="panel wb-view hidden" id="wbInbox">
         <div class="wb-review-top">
           <span class="pill pill-accent" id="wbInboxCount">0</span>
+          <span class="pill" id="wbBrickCount">0</span>
           <span class="muted small" data-i18n="wb.inbox.note">Candidates mined from your text.</span>
+          <button class="btn btn-primary btn-small" id="wbEnrol" type="button" data-i18n="wb.enrol">Enrol and build bricks</button>
           <button class="btn btn-ghost btn-small" id="wbInboxRefresh" type="button" data-i18n="wb.inbox.refresh">Refresh</button>
         </div>
         <p class="muted small hidden" id="wbInboxNote"></p>

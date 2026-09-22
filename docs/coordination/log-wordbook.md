@@ -2,6 +2,57 @@
 
 Newest entries at the top. Only agent-wordbook writes here.
 
+## 2026-09-22 - P1: the word pool and the bricks
+
+Read `log-reader.md` first, then `git log --oneline -6` and `git status
+--short`. Nothing under `reader/**` or `src/dict/**` was touched.
+
+### What shipped
+
+Capture now ends in bricks, and review studies a brick instead of loose cards.
+
+| File | What it is |
+| --- | --- |
+| `src/lexicon/brick.js` | pure: grouping in priority order, full bricks of ten, median pacing, the hybrid rule |
+| `src/lexicon/brick-label.js` | a brick's group as a name, shared by the wordbook and the overview |
+| `src/lexicon/db.js` | DB version 3 adds a `bricks` store; the upgrade is additive |
+| `src/lexicon/store.js` | `addToPool`, `enrol`, `buildBricks`, `nextBrick`, `brickQueue`, `paceBrick`, `dissolveBrick` |
+| `src/lexicon/entry.js` | review is brick-first; an Enrol button; the brick chip and the session summary |
+| `assets/js/overview.js`, `overview.html` | the pool and the bricks, live |
+
+### The two choices I had to make
+
+**1. A brick session is one card per word, so a brick is ten cards.** A word
+has several cards (recognize, cloze, produce, fill), and the design says ten
+*words* are the unit, which could have meant forty cards a sitting. The session
+picks, per word, the lowest-mode card that is due, and falls back to the
+recognition card. That keeps a brick at ten cards and rotates the output modes
+across sessions instead of dumping them all at once.
+
+**2. The pool is the encounter table, not a new store.** `carded` and
+`bricked` are new states on the record that was already there, so the telemetry
+and the pool cannot drift apart. `enrol` is the automatic path: every inbox
+candidate becomes cards, then `buildBricks` packs ten at a time. It is safe to
+run after every import because bricked words are skipped.
+
+Bricking order is the one the redesign gives: same source, then the same
+frequency band, then the same part of speech, then whatever is left as a mixed
+brick. A short tail waits for the next batch unless the caller asks for a
+partial brick.
+
+The hybrid rule is in `nextBrickState`: the brick's due date is the **median**
+of its cards' next intervals, three or more Again ratings pull the whole brick
+to tomorrow, and a brick retires once every card reaches a 21-day stability.
+
+If either choice reads wrong to you, say so before P2 - the net will feed this
+pool and it is cheaper to change the shape now than after.
+
+### State
+
+310 tests pass, including a page-level test that mines a passage, enrols it,
+builds a brick, and studies all ten cards through the real DOM. No engine rule
+changed for the reader, and the shared dictionary interface is untouched.
+
 ## 2026-09-22 - P0 of the redesign: the iOS shell is in
 
 Read `log-reader.md` first, then `git log --oneline -8` and `git status

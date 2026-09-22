@@ -1,6 +1,6 @@
 # iPad-first redesign: the iOS shell and the brick model
 
-Status: **decisions locked; P0, the iOS shell, is implemented.** This supersedes the page and
+Status: **decisions locked; P0 (the iOS shell) and P1 (the pool and the bricks) are implemented.** This supersedes the page and
 navigation parts of `ja-vocab-book-design.md`. The engine described there -
 schema, FSRS-6, passive track, mining funnel, shared dictionary - is reused
 unchanged.
@@ -134,7 +134,7 @@ pacing layer on top:
 | Phase | Contents |
 | --- | --- |
 | P0 | iOS shell and design system: tab bar, nav bar, sheets, tokens. No engine change; the suite stays green. **Done.** |
-| P1 | Pool and bricks: data model, bricking algorithm, brick session. DB version 3. |
+| P1 | Pool and bricks: data model, bricking algorithm, brick session. DB version 3. **Done.** |
 | P2 | River and net: canvas flow, drag-to-cast, catch into the pool. |
 | P3 | The two sections: Learn and Overview; the old five tabs are demoted. |
 | P4 | PWA polish: home-screen fullscreen, motion, empty and error states, touch detail. |
@@ -153,6 +153,28 @@ pacing layer on top:
 The tabs are `Reader / Learn / Overview`. `Home` and `About` moved into the
 navigation bar's `more` sheet. The wordbook's own five tabs are untouched: P3
 collapses them into Learn and Overview.
+
+### P1, as built
+
+| File | What it is |
+| --- | --- |
+| `src/lexicon/brick.js` | pure: grouping in priority order, full bricks of ten, median pacing, the hybrid rule |
+| `src/lexicon/brick-label.js` | a brick's group as a name, shared by the wordbook and the overview |
+| `src/lexicon/db.js` | DB version 3 adds a `bricks` store; the upgrade is additive |
+| `src/lexicon/store.js` | `addToPool`, `enrol`, `buildBricks`, `nextBrick`, `brickQueue`, `paceBrick`, `dissolveBrick` |
+| `src/lexicon/entry.js` | review is brick-first; an Enrol button; the brick chip and the session summary |
+| `assets/js/overview.js`, `overview.html` | the pool and the bricks, live |
+
+The pool is the encounter table with two new states: `carded` (cards exist,
+waiting for a brick) and `bricked`. `enrol` turns every inbox candidate into
+cards and packs the pool into bricks; `buildBricks` runs after every import and
+is safe to repeat because a bricked word is skipped. A brick session is **one
+card per word**, so a brick is ten cards, and the output modes rotate across
+sessions because the card chosen is the lowest-mode one that is due.
+
+The hybrid rule lives in `nextBrickState`: the brick's due date is the median
+of its cards' next intervals, three or more Again ratings pull the whole brick
+to tomorrow, and a brick retires once every card reaches a 21-day stability.
 
 The reader boundary is `docs/coordination/interface-shell.md`, proposed by
 agent-reader. The shell sets `document.documentElement.dataset.shell = 'on'`

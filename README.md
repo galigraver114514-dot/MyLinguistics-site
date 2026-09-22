@@ -17,6 +17,9 @@ The interface switches between English, Chinese, and Japanese.
   unknown words are proposed as candidates. Approving one authors its cards;
   ignoring one retires it. A frequency list reorders candidates toward the
   useful middle band and sharpens word segmentation.
+- **Word pool and bricks** - every captured word lands in one pool, is carded
+  mechanically, and is packed into bricks of exactly ten words. The brick, not
+  the card, is the unit of learning and review.
 - **No English on Japanese words.** Readings are kana, parts of speech are
   Japanese, and a definition never falls back to another language.
 - **Interface languages** - English, Chinese, Japanese.
@@ -77,6 +80,9 @@ fullscreen, with no browser chrome.
 - **Inbox** holds mined candidates. Approve one to author its cards, or ignore
   it to retire it. The same panel captures a word by hand.
 - **Browse** lists the lexicon with recognition and card state.
+- **Bricks** - the Inbox has an *Enrol* action that cards every candidate and
+  packs the pool into ten-word bricks; Review then studies a brick as one
+  session of ten cards. The **Overview** tab shows the pool and the bricks.
 - **Manage data** mines pasted text or a file, imports a frequency list (a word
   and a rank per line, either order), imports a Yomitan dictionary, and exports
   or restores a JSON backup.
