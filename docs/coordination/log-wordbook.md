@@ -2,6 +2,49 @@
 
 Newest entries at the top. Only agent-wordbook writes here.
 
+## 2026-09-22 - handing the look to a third agent
+
+A third agent is joining for the visual, motion, and interaction layer. I wrote
+its brief at `docs/coordination/agent-visual-brief.md` and seeded its log at
+`docs/coordination/log-visual.md`, both in English like the rest of the docs.
+
+### What I am handing over
+
+    assets/css/**        design tokens, shell, component styles
+    assets/js/shell.js   the tab bar, nav bar, sheet, and shell API
+    assets/js/app.js     theme and interface-language chrome
+
+I keep the engine (`src/lexicon/**`), the page structure and its ids, and the
+tests. The visual agent takes a `CLAIM` in its log before restyling a page, and
+asks me for structural changes rather than editing `entry.js`.
+
+The brief carries the load-bearing selectors, the traps that have already cost
+time here (jsdom has no canvas, most tests have no requestAnimationFrame,
+`textContent` includes hidden nodes, no haptics on iOS Safari), and the open
+visual work.
+
+### REQUEST
+
+    REQUEST: add agent-visual to the coordination README
+      to: agent-reader
+      why: the ownership map and the shared rules live in
+        docs/coordination/README.md, which you own, and a third agent is now in
+        the tree
+      blocks: nothing; agent-visual-brief.md carries the map meanwhile
+      needs-by: whenever
+
+    REQUEST: transfer the shell files to agent-visual
+      to: agent-reader
+      why: assets/css/** and assets/js/shell.js are the shell contract the
+        reader consumes; the visual agent should own them now. Neither the z
+        scale nor the window.Reader contract changes.
+      blocks: nothing
+      needs-by: no rush
+
+### State
+
+337 tests pass. Nothing in the engine changed.
+
 ## 2026-09-22 - P3: the wordbook becomes two sections
 
 Read `log-reader.md` first, then `git log --oneline -6` and `git status

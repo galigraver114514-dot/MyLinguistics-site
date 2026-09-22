@@ -1,7 +1,7 @@
-# Coordination between two agents
+# Coordination between agents
 
-Two agents work in this repository **at the same time, in the same working tree,
-on the same branch**. This directory is the protocol that stops them from
+Several agents work in this repository **at the same time, in the same working
+tree, on the same branch**. This directory is the protocol that stops them from
 destroying each other's work. It is not documentation for the site.
 
 ## The situation
@@ -9,13 +9,16 @@ destroying each other's work. It is not documentation for the site.
 - One working tree: `/home/galigraver/projects/MyLinguistics`
 - One branch, `main`. Every push mirrors the site to the public Pages repo
   within a few minutes, so a broken commit is a broken website.
-- Two agents:
+- The agents:
   - **agent-reader** - the Japanese EPUB reader and the shared dictionary
     module. Territory: `reader/**, src/dict/**, docs/ja-reader-*.md`
   - **agent-wordbook** - the study/vocabulary system. Territory:
     `src/lexicon/**, study.html, tests/**, package.json, the existing pages,
     assets/js/**, assets/css/**, .github/**, README.md`
-- Neither agent can message the other. The only channels are the files in this
+  - **agent-visual** - the design system, motion and interaction polish. Read
+    `brief-visual.md` before touching anything; its territory is proposed
+    there and in the map below.
+- No agent can message another. The only channels are the files in this
   directory, the git history, and the human, who relays anything urgent.
 
 ## Hard rules
@@ -50,9 +53,13 @@ destroying each other's work. It is not documentation for the site.
 | `tests/**` except the two prefixes above | agent-wordbook |
 | `package.json`, `package-lock.json`, `node_modules` | agent-wordbook |
 | `study.html`, `docs/ja-vocab-book-design.md` | agent-wordbook |
-| `assets/**`, all root `*.html` except `reader.html` | agent-wordbook |
+| `assets/**` except the agent-visual rows below, and all root `*.html` | agent-wordbook |
 | `.github/**`, `.gitignore`, `README.md` | agent-wordbook |
 | `docs/coordination/log-wordbook.md` | agent-wordbook |
+| `assets/css/tokens.css`, `assets/css/motion.css`, `assets/js/motion.js` | agent-visual |
+| `assets/css/shell.css`, `assets/js/shell.js` | agent-visual, claimed with an `ANSWER:` from agent-wordbook |
+| `reader/theme.css` | agent-visual, once the split from `reader/reader.css` lands |
+| `docs/coordination/log-visual.md` | agent-visual |
 
 Anything not listed belongs to whoever claimed it most recently in their log.
 

@@ -2,6 +2,35 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - a third agent is joining for visuals, motion and interaction
+
+The human is creating an agent for the design system, animation and interaction
+polish. I wrote `docs/coordination/brief-visual.md` so it starts from what
+this project already paid for: the invariants, the measured device facts, the
+interaction decisions already made, the traps that cost time, and a proposed
+territory split.
+
+### The part that concerns both of us
+
+**"Visuals and interaction" collides with both our territories.** Proposed in the
+brief and now in the map:
+
+- `assets/css/tokens.css` plus a new `assets/css/motion.css` and
+  `assets/js/motion.js` go to agent-visual - a design system needs exactly
+  one owner.
+- `assets/css/shell.css` and `assets/js/shell.js` become theirs after
+  an `ANSWER:` from you. They are your files today.
+- `reader/reader.css` is proposed to **split**: structure (viewport,
+  writing-mode, pagination, sheet geometry) stays mine; a new
+  `reader/theme.css` becomes theirs. One writer per file survives the
+  split; it does not survive two people editing one stylesheet.
+- `reader/js/**` stays mine. They request hooks; the brief tells them not to
+  edit the text model or the gesture handler, and gives them the page-turn
+  animator hook to ask for rather than implement.
+
+I also changed `README.md` from "two agents" to several and added the rows
+to the ownership map. `log-visual.md` is theirs to create.
+
 ## 2026-09-22 - generated furigana is dropped, not deferred
 
 Decision from the user: 直接放弃. Recorded as a decision rather than a pending
