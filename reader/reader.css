@@ -214,7 +214,7 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
 #overlay {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 58;
   background: rgba(0, 0, 0, 0.32);
   display: flex;
   align-items: flex-end;
@@ -269,7 +269,7 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 40;
+  z-index: 55;
   max-height: 64vh;
   display: flex;
   flex-direction: column;
@@ -344,7 +344,7 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
 
 #hover-bubble {
   position: fixed;
-  z-index: 60;
+  z-index: 56;
   max-width: 62vw;
   display: flex;
   align-items: baseline;
@@ -368,7 +368,7 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 45;
+  z-index: 55;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -389,6 +389,19 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
   white-space: nowrap;
 }
 #select-bar button { min-width: 40px; padding: 6px 10px; font-size: 0.8rem; }
+
+/* When the shared shell wraps the page it owns the top and side insets and the
+   bottom tab bar. The bottom padding is deliberately left to the shell, which
+   already reserves the tab bar's height; setting it here would fight that rule
+   and hide the tab bar behind the reading surface. */
+body.shell-embedded { padding-top: 0; padding-right: 0; padding-left: 0; }
+body.shell-embedded #bar,
+body.shell-embedded #foot { display: none; }
+/* Keep the reader's bottom sheets clear of the tab bar rather than under it. */
+body.shell-embedded #dict,
+body.shell-embedded #select-bar {
+  bottom: calc(var(--tabbar-h, 0px) + var(--safe-bottom, 0px));
+}
 
 /* Painted by the Custom Highlight API; ignored where it is unsupported. */
 ::highlight(reader-highlight) { background-color: rgba(255, 209, 92, 0.55); }

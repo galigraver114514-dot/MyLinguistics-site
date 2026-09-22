@@ -13,16 +13,17 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=6';
-import { buildChapter } from './text-model.js?v=6';
-import { prepareAndMount } from './render.js?v=6';
-import { SAMPLE_BOOK } from './sample.js?v=6';
-import { createLookup } from './lookup.js?v=6';
-import { createDictionary } from '../../src/dict/index.js?v=6';
-import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=6';
-import { createPainter } from './highlight.js?v=6';
-import { openAnnotations } from './annotations.js?v=6';
-import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=6';
+import { openEpub } from './epub.js?v=7';
+import { buildChapter } from './text-model.js?v=7';
+import { prepareAndMount } from './render.js?v=7';
+import { SAMPLE_BOOK } from './sample.js?v=7';
+import { createLookup } from './lookup.js?v=7';
+import { createDictionary } from '../../src/dict/index.js?v=7';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=7';
+import { createPainter } from './highlight.js?v=7';
+import { createLibrary } from './library.js?v=7';
+import { openAnnotations } from './annotations.js?v=7';
+import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=7';
 
 /**
  * Bumped together with the query strings above.
@@ -33,10 +34,11 @@ import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selec
  * running version is visible on screen, which is the only way to tell a stale
  * cache apart from a real bug from a bug report.
  */
-const APP_VERSION = 'js r6';
+const APP_VERSION = 'js r7';
 
 const SETTINGS_KEY = 'reader.settings.v2';
 const POSITIONS_KEY = 'reader.positions.v2';
+const LAST_BOOK_KEY = 'reader.lastBook.v1';
 const STAGE_KEY = 'reader.stage.v1';
 
 // The site stores a two-way theme in ml.theme; the reader has three schemes of
@@ -109,7 +111,8 @@ const state = {
   selection: null,
   draftRange: null,
   hoverRange: null,
-  annotationStore: null
+  annotationStore: null,
+  library: null
 };
 
 // Created once, at module load. Where the Custom Highlight API is missing the
@@ -391,6 +394,7 @@ function updatePageInfo() {
   }
   els.prev.disabled = state.settings.mode === 'vertical' ? state.page <= 0 : els.viewport.scrollTop <= 0;
   els.next.disabled = state.settings.mode === 'vertical' ? state.page >= state.pages - 1 : false;
+  shellEmit('page', els.pageInfo.textContent);
 }
 
 function goToPage(page) {
@@ -512,6 +516,7 @@ async function loadBook(book) {
   state.epub = book.epub || null;
   els.title.textContent = book.title + (book.author ? ' — ' + book.author : '');
   els.empty.classList.add('hidden');
+  shellEmit('title', book.title);
 
   const saved = positions()[book.key];
   if (saved && typeof saved.chapter === 'number') {
@@ -564,6 +569,18 @@ function fail(error) {
   alert('エラー: ' + message);
 }
 
+/** The book object app.js works with, from a parsed EPUB. */
+function bookFromEpub(epub, fallbackName, size) {
+  return {
+    key: 'epub:' + (epub.metadata.identifier || epub.metadata.title || fallbackName) + ':' + size,
+    title: epub.metadata.title || fallbackName,
+    author: epub.metadata.author || '',
+    count: epub.chapters.length,
+    epub: epub,
+    read: function (i) { return epub.readChapter(i); }
+  };
+}
+
 async function openFile(file) {
   if (!file) return;
   busy(true);
@@ -578,15 +595,9 @@ async function openFile(file) {
     progress('目次を解析中', 0.45);
     await nextFrame();
     const epub = await openEpub(bytes);
-    const key = 'epub:' + (epub.metadata.identifier || epub.metadata.title || file.name) + ':' + file.size;
-    await loadBook({
-      key: key,
-      title: epub.metadata.title || file.name,
-      author: epub.metadata.author || '',
-      count: epub.chapters.length,
-      epub: epub,
-      read: function (i) { return epub.readChapter(i); }
-    });
+    const book = bookFromEpub(epub, file.name, bytes.byteLength);
+    await loadBook(book);
+    await rememberBook(book, bytes);
   } catch (error) {
     els.empty.classList.remove('hidden');
     fail(error);
@@ -603,6 +614,196 @@ function openSample() {
     count: SAMPLE_BOOK.chapters.length,
     epub: null,
     read: function (i) { return Promise.resolve(SAMPLE_BOOK.chapters[i] || ''); }
+  });
+}
+
+/* --------------------------------------------------------------- library */
+
+function getLibrary() {
+  if (!state.library) state.library = createLibrary();
+  return state.library;
+}
+
+/**
+ * Keep the opened book for the next visit.
+ *
+ * Best effort: a refused quota or an unavailable store costs the offline copy,
+ * never the session that is already open. The id is the same key the position
+ * store uses, so a re-open overwrites rather than accumulating copies.
+ */
+async function rememberBook(book, bytes) {
+  writeJson(LAST_BOOK_KEY, book.key);
+  try {
+    await getLibrary().save({
+      id: book.key,
+      title: book.title,
+      author: book.author,
+      size: bytes.byteLength,
+      chapterCount: book.count,
+      bytes: bytes
+    });
+  } catch (error) {
+    // The reader keeps working; only the offline copy is missing.
+  }
+}
+
+async function openFromLibrary(id) {
+  busy(true);
+  els.empty.classList.remove('hidden');
+  try {
+    progress('本棚から開いています', 0.2);
+    await nextFrame();
+    const record = await getLibrary().load(id);
+    if (!record || !record.bytes) throw new Error('この本は保存されていません。もう一度ファイルを開いてください。');
+    const bytes = record.bytes instanceof Uint8Array
+      ? record.bytes
+      : new Uint8Array(await record.bytes.arrayBuffer());
+
+    progress('目次を解析中', 0.5);
+    await nextFrame();
+    const epub = await openEpub(bytes);
+    const book = bookFromEpub(epub, record.title || 'book', bytes.byteLength);
+    book.key = id;   // the stored id is authoritative, even if the package id moved
+    await loadBook(book);
+    writeJson(LAST_BOOK_KEY, id);
+  } catch (error) {
+    els.empty.classList.remove('hidden');
+    fail(error);
+  } finally {
+    busy(false);
+  }
+}
+
+/** Reopen the last book on launch, so a reload does not land on an empty page. */
+async function restoreLastBook() {
+  const id = readJson(LAST_BOOK_KEY, null);
+  if (!id) return;
+  try {
+    const library = getLibrary();
+    if (!library.available) return;
+    if (!(await library.has(id))) return;
+    await openFromLibrary(id);
+  } catch (error) {
+    // The empty state stays, and a file can still be opened by hand.
+  }
+}
+
+async function storageEstimate() {
+  if (typeof navigator === 'undefined' || !navigator.storage || !navigator.storage.estimate) return null;
+  try {
+    const estimate = await navigator.storage.estimate();
+    return { bytes: estimate.usage, quota: estimate.quota };
+  } catch (error) {
+    return null;
+  }
+}
+
+function libraryRow(book) {
+  const item = document.createElement('li');
+  const title = document.createElement('strong');
+  title.textContent = book.title || book.id;
+  item.appendChild(title);
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  const bits = [];
+  if (book.author) bits.push(book.author);
+  if (book.chapterCount) bits.push(book.chapterCount + ' 章');
+  if (book.size) bits.push(Math.max(1, Math.round(book.size / 1048576)) + ' MB');
+  meta.textContent = bits.join(' · ');
+  item.appendChild(meta);
+
+  const row = document.createElement('div');
+  row.className = 'dict-candidates';
+
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.textContent = '開く';
+  open.addEventListener('click', function () {
+    closeSheet();
+    openFromLibrary(book.id).catch(function (error) { fail(error); });
+  });
+  row.appendChild(open);
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = '削除';
+  remove.addEventListener('click', async function () {
+    remove.disabled = true;
+    try {
+      await getLibrary().remove(book.id);
+      if (readJson(LAST_BOOK_KEY, null) === book.id) writeJson(LAST_BOOK_KEY, null);
+      openSheet('本棚', buildLibrarySheet);
+    } catch (error) {
+      remove.disabled = false;
+      alert('削除できませんでした');
+    }
+  });
+  row.appendChild(remove);
+  item.appendChild(row);
+  return item;
+}
+
+async function buildLibrarySheet(body) {
+  const library = getLibrary();
+
+  const intro = document.createElement('p');
+  intro.className = 'dict-hint';
+  intro.textContent = '開いた本はこの端末に保存され、次回はここから開けます。外部には送信されません。';
+  body.appendChild(intro);
+
+  const actions = document.createElement('div');
+  actions.className = 'row';
+  const openButton = document.createElement('button');
+  openButton.type = 'button';
+  openButton.textContent = 'ファイルを開く（.epub）';
+  openButton.addEventListener('click', function () {
+    closeSheet();
+    els.fileInput.click();
+  });
+  actions.appendChild(openButton);
+  body.appendChild(actions);
+
+  const list = document.createElement('ul');
+  list.className = 'dict-list';
+
+  let books = [];
+  let failure = null;
+  try {
+    books = await library.list();
+  } catch (error) {
+    failure = error;
+  }
+
+  if (failure) {
+    const item = document.createElement('li');
+    item.textContent = library.available ? '本棚を読めませんでした。' : 'この環境では本の保存が使えません。';
+    list.appendChild(item);
+  } else if (books.length === 0) {
+    const item = document.createElement('li');
+    item.textContent = 'まだ保存された本がありません。';
+    list.appendChild(item);
+  } else {
+    for (let i = 0; i < books.length; i++) list.appendChild(libraryRow(books[i]));
+  }
+  body.appendChild(list);
+
+  const usage = await storageEstimate();
+  if (usage && usage.bytes !== null && usage.bytes !== undefined) {
+    const note = document.createElement('p');
+    note.className = 'dict-hint';
+    note.textContent = '使用量: ' + Math.round(usage.bytes / 1048576) + ' MB' +
+      (usage.quota ? ' / ' + Math.round(usage.quota / 1048576) + ' MB' : '');
+    body.appendChild(note);
+  }
+}
+
+function openLibrarySheet() {
+  openSheet('本棚', function (body) {
+    body.textContent = '読み込み中…';
+    buildLibrarySheet(body).catch(function (error) {
+      body.textContent = '本棚を読めませんでした: ' + (error && error.message ? error.message : error);
+    });
   });
 }
 
@@ -1497,7 +1698,7 @@ els.larger.addEventListener('click', function () {
   repaginateKeepingPlace();
 });
 
-els.open.addEventListener('click', function () { els.fileInput.click(); });
+els.open.addEventListener('click', openLibrarySheet);
 els.sample.addEventListener('click', function () {
   openSample().catch(function (error) { fail(error); });
 });
@@ -1549,14 +1750,98 @@ window.addEventListener('unhandledrejection', function (event) {
   fail(event.reason);
 });
 
+/* -------------------------------------------------------------- shell API */
+
+// The shared shell (assets/js/shell.js) wraps the reader when it is present.
+// This adapter is deliberately tiny: the shell asks for a title and a list of
+// actions, and calls run(id). Nothing here knows what the shell looks like, and
+// nothing in the shell has to know what the reader's buttons do.
+const shellEvents = { title: [], page: [] };
+
+function shellEmit(name, value) {
+  const listeners = shellEvents[name] || [];
+  for (let i = 0; i < listeners.length; i++) {
+    try {
+      listeners[i](value);
+    } catch (error) {
+      // A shell listener must never be able to break reading.
+    }
+  }
+}
+
+const READER_ACTIONS = [
+  { id: 'file', label: 'ファイル' },
+  { id: 'toc', label: '目次' },
+  { id: 'dict', label: '辞書' },
+  { id: 'settings', label: '表示' }
+];
+
+function shellAction(id) {
+  if (id === 'file') openLibrarySheet();
+  else if (id === 'toc') openSheet('目次', buildToc);
+  else if (id === 'dict') openDictionarySheet();
+  else if (id === 'settings') openSheet('表示', buildSettings);
+}
+
+/**
+ * Is the shared shell wrapping this page?
+ *
+ * Three signals, because the two scripts race: shell.js adds has-shell on
+ * DOMContentLoaded, this module can run first, and the shell's markup is
+ * static in the page. Any one of them is enough, and none of them asks the
+ * shell to know this function exists.
+ */
+function shellPresent() {
+  if (typeof document === 'undefined') return false;
+  if (document.documentElement.getAttribute('data-shell') === 'on') return true;
+  if (document.body && document.body.classList.contains('has-shell')) return true;
+  return !!document.querySelector('.tabbar, .navbar');
+}
+
+function syncEmbed() {
+  if (typeof document === 'undefined' || !document.body) return;
+  document.body.classList.toggle('shell-embedded', shellPresent());
+}
+
+if (typeof window !== 'undefined') {
+  window.Reader = {
+    title: function () { return state.book ? state.book.title : 'リーダー'; },
+    actions: function () { return READER_ACTIONS.slice(); },
+    run: shellAction,
+    embedded: shellPresent,
+    on: function (name, handler) {
+      if (!shellEvents[name] || typeof handler !== 'function') return function () {};
+      shellEvents[name].push(handler);
+      return function () {
+        const at = shellEvents[name].indexOf(handler);
+        if (at >= 0) shellEvents[name].splice(at, 1);
+      };
+    }
+  };
+}
+
 /* ----------------------------------------------------------------- init */
 
 loadSettings();
 applyLayout();
 updatePageInfo();
 
+// The shell owns the bars and the safe areas when it is present. Its script may
+// run after this one, so check now, again on DOMContentLoaded, and watch for the
+// class being added later. Toggling to the same value does not mutate the class
+// attribute, so the observer cannot loop.
+syncEmbed();
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncEmbed);
+  const Observer = (typeof window !== 'undefined' && window.MutationObserver)
+    || (typeof MutationObserver === 'function' ? MutationObserver : null);
+  if (Observer && document.body) {
+    new Observer(syncEmbed).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+}
+
 const buildEl = document.getElementById('build');
-if (buildEl) buildEl.textContent = 'html r6 · ' + APP_VERSION;
+if (buildEl) buildEl.textContent = 'html r7 · ' + APP_VERSION;
 
 // If the previous run never reached "done", its last stage is still in storage.
 // Say so, instead of leaving the next run to reproduce the same freeze blind.
@@ -1571,3 +1856,5 @@ if (lastStage && lastStage.label && lastStage.label !== 'done') {
 if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.persist) {
   navigator.storage.persist().catch(function () {});
 }
+
+restoreLastBook().catch(function () { /* an empty page is a fine fallback */ });

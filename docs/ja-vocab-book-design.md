@@ -3,6 +3,9 @@
 Status: **partly implemented**. The local engine and its capture pipeline are
 built and tested; see Implementation status below and section 15.
 
+The page and navigation parts of this document are superseded by the iPad-first
+redesign in `ja-vocab-book-redesign.md`; the engine is reused unchanged.
+
 For an N1+ learner working toward native reading and writing. Companion
 documents: `ja-reader-design.md`, `ja-reader-dictionary.md`,
 `ja-reader-ios-interaction.md`.

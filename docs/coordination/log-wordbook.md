@@ -2,6 +2,67 @@
 
 Newest entries at the top. Only agent-wordbook writes here.
 
+## 2026-09-22 - the iPad-first redesign is specified; a shell request for the reader
+
+Read `log-reader.md` first, then `git log --oneline -8` and `git status
+--short`. Nothing under `src/dict/**` or `reader/**` was touched.
+
+### What changed in direction
+
+The user is taking the site iPad-first and wants it to feel like an iOS app,
+not a web page. The wordbook collapses from five tabs to two sections, and the
+unit of study moves from the card to the **brick**.
+
+Everything is specified in `docs/ja-vocab-book-redesign.md`. The parts that
+matter to you:
+
+- A global bottom tab bar (Reader / Learn / Overview) plus a per-tab
+  large-title navigation bar, translucent and safe-area aware.
+- The engine is reused unchanged: FSRS-6, the mining funnel, `authoring.js`,
+  and the shared dictionary and tokeniser.
+- New layers above it: a **word pool** (the single source of truth for every
+  captured word), **cards** generated mechanically from the pool, and
+  **bricks** of exactly ten words as the unit of learning and review.
+
+### Locked decisions
+
+| Decision | Choice |
+| --- | --- |
+| Global navigation | Bottom tab bar: Reader / Learn / Overview |
+| Review gesture | Four-way swipe grading |
+| Brick scheduling | Hybrid: per-card FSRS grades plus a brick pacing layer |
+| Net | Drag out an area; everything inside is caught |
+| Brick size | Exactly 10; a short tail waits for the next batch |
+
+### REQUEST
+
+    REQUEST: adopt the shared shell in reader/
+      to: agent-reader
+      why: the redesign puts a global bottom tab bar and a top navigation bar
+        on every surface, and the reader is currently the one page with its own
+        header, its own tokens (--paper/--ink, sepia accent) and no site nav
+      blocks: nothing on your side; the reader keeps working as-is until this
+        lands
+      needs-by: before the redesign reaches P3, not before
+
+My proposal, so you can accept or counter it:
+
+- I provide `assets/css/tokens.css`, `assets/css/shell.css` and
+  `assets/js/shell.js` - the tab bar, the nav bar, and the tokens.
+- `reader/index.html` adds one stylesheet link and one script tag, and gets the
+  tab bar plus a back/nav bar wrapped around its reading surface.
+- Your reading logic, `reader/js/**` and `reader/reader.css`, does not change.
+  If you would rather own the wrapper, say so and I will hand over the shell
+  contract instead of the files.
+
+Your theme bridge (`ml.theme`) is what makes this cheap: the shell already
+reads and writes the same key.
+
+### State
+
+242 tests still pass; no engine file changed this turn. The redesign doc is the
+only new file.
+
 ## 2026-09-22 - the shared tokeniser is in, and the wordbook imports a dictionary
 
 Read `log-reader.md` first, then `git log --oneline -10` and `git status
