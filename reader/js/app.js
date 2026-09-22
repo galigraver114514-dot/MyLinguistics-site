@@ -13,10 +13,13 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=4';
-import { buildChapter } from './text-model.js?v=4';
-import { prepareAndMount } from './render.js?v=4';
-import { SAMPLE_BOOK } from './sample.js?v=4';
+import { openEpub } from './epub.js?v=5';
+import { buildChapter } from './text-model.js?v=5';
+import { prepareAndMount } from './render.js?v=5';
+import { SAMPLE_BOOK } from './sample.js?v=5';
+import { createLookup } from './lookup.js?v=5';
+import { createDictionary } from '../../src/dict/index.js?v=5';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=5';
 
 /**
  * Bumped together with the query strings above.
@@ -27,7 +30,7 @@ import { SAMPLE_BOOK } from './sample.js?v=4';
  * running version is visible on screen, which is the only way to tell a stale
  * cache apart from a real bug from a bug report.
  */
-const APP_VERSION = 'js r4';
+const APP_VERSION = 'js r5';
 
 const SETTINGS_KEY = 'reader.settings.v2';
 const POSITIONS_KEY = 'reader.positions.v2';
@@ -59,7 +62,17 @@ const els = {
   sheetTitle: document.getElementById('sheet-title'),
   sheetBody: document.getElementById('sheet-body'),
   closeSheet: document.getElementById('btn-close-sheet'),
-  fileInput: document.getElementById('file-input')
+  fileInput: document.getElementById('file-input'),
+  dict: document.getElementById('dict'),
+  dictSurface: document.getElementById('dict-surface'),
+  dictReading: document.getElementById('dict-reading'),
+  dictBody: document.getElementById('dict-body'),
+  dictBack: document.getElementById('dict-back'),
+  dictPrev: document.getElementById('dict-prev'),
+  dictNext: document.getElementById('dict-next'),
+  dictClose: document.getElementById('dict-close'),
+  dictButton: document.getElementById('btn-dict'),
+  dictInput: document.getElementById('dict-input')
 };
 
 const state = {
@@ -72,7 +85,14 @@ const state = {
   objectUrls: [],
   settings: { mode: 'vertical', fontSize: 19, theme: 'paper' },
   saveTimer: 0,
-  chromeHidden: false
+  chromeHidden: false,
+  dictionary: null,
+  dictPromise: null,
+  lookup: null,
+  lookupPromise: null,
+  dictOffset: -1,
+  dictStyles: new Set(),
+  sourceTitles: new Map()
 };
 
 const busyEl = document.createElement('div');
@@ -442,6 +462,8 @@ async function showChapter(index, offset) {
     await renderInto(html);
 
     state.model = buildChapter(els.content);
+    refreshLookupText();
+    closeDict();
     applyLayout();
     paginate();
 
@@ -647,6 +669,385 @@ function repaginateKeepingPlace() {
   queueSave();
 }
 
+/* -------------------------------------------------------------- dictionary */
+
+// There is no bundled dictionary: a JP-JP dictionary is the one the reader
+// actually owns, it must never be published, and it is imported from a local
+// Yomitan zip. Until then the panel says so instead of failing silently.
+const DICT_STORAGE = 'ml-dict';
+
+function getDictionary() {
+  if (state.dictPromise) return state.dictPromise;
+  state.dictPromise = (async function () {
+    const dict = createDictionary({ packs: [], storageName: DICT_STORAGE });
+    await dict.ready;
+    try {
+      const stored = await dict.stored();
+      for (let i = 0; i < stored.length; i++) {
+        try {
+          await dict.restore(stored[i].id);
+        } catch (error) {
+          // A stored dictionary that cannot be reopened is reported through
+          // problems(); it must not stop the reader from opening.
+        }
+      }
+    } catch (error) {
+      // No IndexedDB, or nothing stored: both are fine.
+    }
+    state.dictionary = dict;
+    return dict;
+  })();
+  return state.dictPromise;
+}
+
+async function getLookup() {
+  if (state.lookup) return state.lookup;
+  if (!state.lookupPromise) {
+    state.lookupPromise = (async function () {
+      const dict = await getDictionary();
+      state.lookup = createLookup({ dictionary: dict });
+      if (state.model) state.lookup.setText(state.model.baseText);
+      return state.lookup;
+    })();
+  }
+  return state.lookupPromise;
+}
+
+/** A new chapter invalidates the tokens, so hand the controller the new text. */
+function refreshLookupText() {
+  if (state.lookup && state.model) state.lookup.setText(state.model.baseText);
+}
+
+/**
+ * baseText offset for a tap, but only when the tap actually landed on text.
+ *
+ * offsetAtPoint snaps to the nearest text, which is right for restoring a
+ * reading position and wrong for lookup: every tap in the margin would look up
+ * whatever word happened to be closest. The margins are navigation, so the
+ * geometry has to agree with the gesture map.
+ */
+function textOffsetAt(x, y) {
+  if (!state.model || state.model.length === 0) return -1;
+  const element = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(x, y) : null;
+  if (!element || !els.content.contains(element)) return -1;
+  const rects = segmentRects();
+  const slack = 6;
+  for (let i = 0; i < rects.length; i++) {
+    const rect = rects[i].rect;
+    if (x >= rect.left - slack && x <= rect.right + slack && y >= rect.top - slack && y <= rect.bottom + slack) {
+      return offsetAtPoint(x, y);
+    }
+  }
+  return -1;
+}
+
+function closeDict() {
+  els.dict.hidden = true;
+  state.dictOffset = -1;
+}
+
+async function showLookupAt(offset) {
+  let lookup;
+  try {
+    lookup = await getLookup();
+  } catch (error) {
+    fail(error);
+    return;
+  }
+  state.dictOffset = offset;
+  const view = await lookup.atOffset(offset);
+  if (view) renderDict(view);
+}
+
+async function stepDict(direction) {
+  if (!state.lookup || state.dictOffset < 0) return;
+  const view = await state.lookup.stepOffset(state.dictOffset, direction);
+  if (!view) return;
+  if (view.token) state.dictOffset = Math.floor((view.token.start + view.token.end) / 2);
+  renderDict(view);
+}
+
+async function followReference(href) {
+  if (!state.lookup) return;
+  try {
+    const view = await state.lookup.follow(href);
+    if (view) renderDict(view);
+  } catch (error) {
+    // A dead cross-reference must not take the definition down with it.
+  }
+}
+
+function sourceTitle(sourceId) {
+  if (state.sourceTitles.has(sourceId)) return state.sourceTitles.get(sourceId);
+  let title = sourceId;
+  if (state.dictionary && typeof state.dictionary.sources === 'function') {
+    const list = state.dictionary.sources();
+    for (let i = 0; i < list.length; i++) {
+      if (list[i].id === sourceId) { title = list[i].title || sourceId; break; }
+    }
+  }
+  state.sourceTitles.set(sourceId, title);
+  return title;
+}
+
+/** Inject a dictionary's own stylesheet once, scoped to that dictionary. */
+async function ensureDictionaryStyles(sourceId) {
+  if (!sourceId || state.dictStyles.has(sourceId)) return;
+  state.dictStyles.add(sourceId);
+  try {
+    const dict = await getDictionary();
+    if (!dict || typeof dict.dictionaryStyles !== 'function') return;
+    const css = await dict.dictionaryStyles(sourceId);
+    if (css) ensureStyles(document, sourceId, css);
+  } catch (error) {
+    // CSS is presentation only; a dictionary without it is still readable.
+  }
+}
+
+function entryCard(entry) {
+  const card = document.createElement('section');
+  card.className = 'dict-entry';
+  card.setAttribute('data-dict', entry.source);
+
+  const heading = document.createElement('h3');
+  const reading = entry.reading && entry.reading !== entry.headword ? '（' + entry.reading + '）' : '';
+  heading.textContent = entry.headword + reading;
+  card.appendChild(heading);
+
+  const source = document.createElement('div');
+  source.className = 'src';
+  source.textContent = sourceTitle(entry.source);
+  card.appendChild(source);
+
+  const senses = Array.isArray(entry.senses) ? entry.senses : [];
+  for (let s = 0; s < senses.length; s++) {
+    const sense = senses[s];
+    const wrap = document.createElement('div');
+    wrap.className = 'dict-sense';
+
+    if (sense.pos && sense.pos.length) {
+      const pos = document.createElement('span');
+      pos.className = 'pos';
+      pos.textContent = sense.pos.join('・');
+      wrap.appendChild(pos);
+    }
+
+    const gloss = document.createElement('div');
+    gloss.className = 'dict-gloss';
+    const items = Array.isArray(sense.glosses) ? sense.glosses : [sense.glosses];
+    for (let g = 0; g < items.length; g++) {
+      const item = items[g];
+      if (item === null || item === undefined) continue;
+      if (typeof item === 'string') {
+        const line = document.createElement('div');
+        line.textContent = item;
+        gloss.appendChild(line);
+      } else {
+        gloss.appendChild(renderGloss(item, {
+          document: document,
+          onReference: function (href) { followReference(href); }
+        }));
+      }
+    }
+    wrap.appendChild(gloss);
+    card.appendChild(wrap);
+  }
+
+  ensureDictionaryStyles(entry.source);
+  if (state.dictionary) {
+    hydrateImages(card, function (path) { return state.dictionary.assetUrl(entry.source, path); }).catch(function () {});
+  }
+  return card;
+}
+
+function renderDict(view) {
+  if (!view) return;
+  els.dictSurface.textContent = view.surface;
+  els.dictReading.textContent = view.entries.length && view.entries[0].reading ? view.entries[0].reading : '';
+  els.dictBack.hidden = !(state.lookup && state.lookup.canGoBack());
+
+  const body = els.dictBody;
+  body.replaceChildren();
+
+  if (!view.entries.length) {
+    const message = document.createElement('p');
+    message.className = 'dict-notfound';
+    message.textContent = '「' + view.surface + '」の項目が見つかりません。';
+    body.appendChild(message);
+
+    const candidates = (view.candidates || []).filter(function (form) { return form && form !== view.surface; });
+    if (candidates.length) {
+      const row = document.createElement('div');
+      row.className = 'dict-candidates';
+      const limit = Math.min(candidates.length, 8);
+      for (let i = 0; i < limit; i++) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = candidates[i];
+        button.addEventListener('click', (function (form) {
+          return function () { followReference(form); };
+        })(candidates[i]));
+        row.appendChild(button);
+      }
+      body.appendChild(row);
+    }
+
+    if (!state.dictionary || !state.dictionary.sources || state.dictionary.sources().length === 0) {
+      const hint = document.createElement('p');
+      hint.className = 'dict-hint';
+      hint.textContent = '「辞書」から Yomitan 形式の辞書（.zip）を読み込むと、ここに語釈が出ます。';
+      body.appendChild(hint);
+    }
+    els.dict.hidden = false;
+    return;
+  }
+
+  const limit = Math.min(view.entries.length, 8);
+  for (let i = 0; i < limit; i++) body.appendChild(entryCard(view.entries[i]));
+  els.dict.hidden = false;
+}
+
+/* ------------------------------------------------------- dictionary import */
+
+async function buildDictionarySheet(body) {
+  const dict = await getDictionary();
+
+  const intro = document.createElement('p');
+  intro.className = 'dict-hint';
+  intro.textContent = 'Yomitan 形式の辞書（.zip）をこの端末に保存します。外部には送信されません。';
+  body.appendChild(intro);
+
+  const actions = document.createElement('div');
+  actions.className = 'row';
+  const importButton = document.createElement('button');
+  importButton.type = 'button';
+  importButton.textContent = '辞書を読み込む（.zip）';
+  importButton.addEventListener('click', function () { els.dictInput.click(); });
+  actions.appendChild(importButton);
+  body.appendChild(actions);
+
+  const list = document.createElement('ul');
+  list.className = 'dict-list';
+
+  const sources = dict.sources ? dict.sources() : [];
+  const loaded = new Set();
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i];
+    loaded.add(source.id);
+    const item = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = source.title || source.id;
+    item.appendChild(title);
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    const bits = [];
+    if (source.entryCount) bits.push(source.entryCount + ' 項目');
+    if (source.languages && source.languages.length) bits.push(source.languages.join('/'));
+    if (source.banks) {
+      bits.push('term ' + source.banks.termBanks + (source.banks.metaBanks ? ' · meta ' + source.banks.metaBanks : ' · meta なし'));
+    }
+    meta.textContent = bits.join(' · ');
+    item.appendChild(meta);
+    list.appendChild(item);
+  }
+
+  let stored = [];
+  try {
+    stored = await dict.stored();
+  } catch (error) {
+    stored = [];
+  }
+  for (let i = 0; i < stored.length; i++) {
+    if (loaded.has(stored[i].id)) continue;
+    const source = stored[i];
+    const item = document.createElement('li');
+    const title = document.createElement('strong');
+    title.textContent = source.title || source.id;
+    item.appendChild(title);
+    const meta = document.createElement('span');
+    meta.className = 'meta';
+    meta.textContent = '保存済み・未読み込み';
+    item.appendChild(meta);
+    const load = document.createElement('button');
+    load.type = 'button';
+    load.textContent = '読み込む';
+    load.style.marginTop = '6px';
+    load.addEventListener('click', async function () {
+      load.disabled = true;
+      try {
+        await dict.restore(source.id);
+        state.sourceTitles.clear();
+        refreshLookupText();
+        openSheet('辞書', buildDictionarySheet);
+      } catch (error) {
+        load.disabled = false;
+        alert('読み込めませんでした: ' + (error && error.message ? error.message : error));
+      }
+    });
+    item.appendChild(load);
+    list.appendChild(item);
+  }
+
+  if (list.children.length === 0) {
+    const empty = document.createElement('li');
+    empty.textContent = 'まだ辞書がありません。';
+    list.appendChild(empty);
+  }
+  body.appendChild(list);
+
+  const usage = await dict.usage().catch(function () { return null; });
+  if (usage && usage.supported && usage.bytes !== null && usage.bytes !== undefined) {
+    const note = document.createElement('p');
+    note.className = 'dict-hint';
+    note.textContent = '使用量: ' + Math.round(usage.bytes / 1048576) + ' MB' +
+      (usage.quota ? ' / ' + Math.round(usage.quota / 1048576) + ' MB' : '');
+    body.appendChild(note);
+  }
+
+  const problems = dict.problems ? dict.problems() : [];
+  if (problems.length) {
+    const note = document.createElement('p');
+    note.className = 'dict-hint';
+    note.textContent = '問題: ' + problems.map(function (item) { return item.id + ' (' + item.stage + ')'; }).join('、');
+    body.appendChild(note);
+  }
+}
+
+function openDictionarySheet() {
+  openSheet('辞書', function (body) {
+    body.textContent = '読み込み中…';
+    buildDictionarySheet(body).catch(function (error) {
+      body.textContent = '辞書の状態を読めませんでした: ' + (error && error.message ? error.message : error);
+    });
+  });
+}
+
+async function importDictionary(file) {
+  if (!file) return;
+  closeSheet();
+  busy(true);
+  try {
+    progress('辞書を読み込み中', 0.05);
+    await nextFrame();
+    const dict = await getDictionary();
+    const result = await dict.importYomitan(file, function (event) {
+      if (!event) return;
+      if (event.stage === 'read') progress('辞書を読み込み中', 0.1);
+      else if (event.stage === 'walk') progress('解析中 (' + event.bank + ' / ' + event.banks + ')', 0.1 + 0.7 * (event.bank / Math.max(1, event.banks)));
+      else if (event.stage === 'sort') progress('索引を作成中', 0.85);
+      else if (event.stage === 'persist') progress('端末に保存中', 0.92);
+    });
+    state.sourceTitles.clear();
+    refreshLookupText();
+    const title = result && result.source ? (result.source.title || result.source.id) : '辞書';
+    alert(title + ' を読み込みました（' + (result ? result.entries : 0) + ' 項目）。本文をタップすると語釈が出ます。');
+  } catch (error) {
+    fail(error);
+  } finally {
+    busy(false);
+  }
+}
+
 /* --------------------------------------------------------------- wiring */
 
 function toggleChrome() {
@@ -675,6 +1076,13 @@ els.viewport.addEventListener('pointerup', function (event) {
   }
 
   if (Math.abs(dx) < 12 && Math.abs(dy) < 12) {
+    // Text first: a tap that landed on a word is a lookup, and only a tap that
+    // landed on nothing falls through to navigation or the chrome.
+    const offset = textOffsetAt(event.clientX, event.clientY);
+    if (offset >= 0) {
+      showLookupAt(offset).catch(function (error) { fail(error); });
+      return;
+    }
     const rect = els.viewport.getBoundingClientRect();
     const fraction = (event.clientX - rect.left) / rect.width;
     if (state.settings.mode === 'vertical') {
@@ -720,6 +1128,20 @@ els.settings.addEventListener('click', function () { openSheet('表示', buildSe
 els.closeSheet.addEventListener('click', closeSheet);
 els.overlay.addEventListener('click', function (event) { if (event.target === els.overlay) closeSheet(); });
 
+els.dictClose.addEventListener('click', closeDict);
+els.dictBack.addEventListener('click', function () {
+  const view = state.lookup && state.lookup.back();
+  if (view) renderDict(view);
+});
+els.dictPrev.addEventListener('click', function () { stepDict(-1).catch(function (error) { fail(error); }); });
+els.dictNext.addEventListener('click', function () { stepDict(1).catch(function (error) { fail(error); }); });
+els.dictButton.addEventListener('click', openDictionarySheet);
+els.dictInput.addEventListener('change', function () {
+  const file = els.dictInput.files && els.dictInput.files[0];
+  els.dictInput.value = '';
+  if (file) importDictionary(file);
+});
+
 els.fileInput.addEventListener('change', function () {
   const file = els.fileInput.files && els.fileInput.files[0];
   els.fileInput.value = '';
@@ -733,6 +1155,10 @@ window.addEventListener('resize', function () {
 });
 
 document.addEventListener('keydown', function (event) {
+  if (event.key === 'Escape') {
+    if (!els.dict.hidden) { closeDict(); event.preventDefault(); return; }
+    if (!els.overlay.hidden) { closeSheet(); event.preventDefault(); return; }
+  }
   if (event.key === 'ArrowLeft' || event.key === 'PageUp') { scrollByScreen(-1); event.preventDefault(); }
   else if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') { scrollByScreen(1); event.preventDefault(); }
 });
@@ -752,7 +1178,7 @@ applyLayout();
 updatePageInfo();
 
 const buildEl = document.getElementById('build');
-if (buildEl) buildEl.textContent = 'html r4 · ' + APP_VERSION;
+if (buildEl) buildEl.textContent = 'html r5 · ' + APP_VERSION;
 
 // If the previous run never reached "done", its last stage is still in storage.
 // Say so, instead of leaving the next run to reproduce the same freeze blind.

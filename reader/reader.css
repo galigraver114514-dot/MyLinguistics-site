@@ -258,3 +258,84 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
 
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 4px; }
 .row-label { width: 100%; font-size: 0.78rem; color: var(--muted); margin-bottom: 2px; }
+
+/* -------------------------------------------------------------- dictionary */
+
+/* A bottom sheet rather than a modal: the definition stays open while you keep
+   reading, and the text above it is still visible. horizontal-tb is forced
+   because the viewport it floats over is in vertical writing mode. */
+#dict {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  max-height: 64vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bar);
+  color: var(--ink);
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18);
+  writing-mode: horizontal-tb;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+#dict[hidden] { display: none; }
+
+.dict-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.dict-head button { min-width: 40px; padding: 6px 10px; }
+#dict-title { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; text-align: center; }
+#dict-surface { font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dict-reading { font-size: 0.76rem; color: var(--muted); min-height: 1em; }
+
+#dict-body {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 14px calc(18px + env(safe-area-inset-bottom));
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+  line-height: 1.7;
+}
+
+.dict-entry { border-top: 1px solid var(--line); padding: 10px 0; }
+.dict-entry:first-child { border-top: 0; padding-top: 0; }
+.dict-entry h3 { margin: 0 0 2px; font-size: 1.02rem; }
+.dict-entry .src { font-size: 0.68rem; color: var(--muted); margin-bottom: 6px; }
+
+.dict-sense { margin: 8px 0; }
+.dict-sense .pos { font-size: 0.7rem; color: var(--muted); margin-right: 6px; }
+.dict-gloss { font-size: 0.94rem; }
+.dict-gloss > div, .dict-gloss > p { margin: 0 0 0.35em; }
+
+/* Cross-references are elements, not anchors, so they need their own affordance. */
+.dict-ref {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.dict-ref:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* 大辞林 marks these; a definition with no visual hierarchy is hard to scan. */
+#dict-body [data-name='見出部'] { display: block; margin-bottom: 3px; }
+#dict-body [data-name='見出仮名'] { color: var(--muted); font-size: 0.86em; font-weight: 500; }
+#dict-body [data-name='標準表記'] { font-weight: 600; }
+
+.dict-notfound { color: var(--muted); margin: 4px 0 10px; }
+.dict-hint { font-size: 0.76rem; color: var(--muted); margin: 4px 0 0; }
+.dict-candidates { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.dict-candidates button { font-size: 0.8rem; min-height: 34px; padding: 5px 10px; }
+
+.dict-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.dict-list li { border-top: 1px solid var(--line); padding: 9px 0; font-size: 0.86rem; }
+.dict-list li:first-child { border-top: 0; }
+.dict-list .meta { display: block; color: var(--muted); font-size: 0.72rem; }

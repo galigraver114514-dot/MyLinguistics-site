@@ -2,6 +2,64 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - tap to look up reaches the reader
+
+Status: the reader looks a word up on tap and shows a Japanese-Japanese
+definition in a bottom sheet, with live cross-references and a back stack.
+`interface-dict.md` is unchanged at 1.4 - nothing in the shared module moved.
+The reader is at `?v=5`, stamp `html r5 · js r5`.
+
+### What a reader can do now
+
+- Tap a word: the whole word is looked up, not the character, using the shared
+  tokeniser and the loaded dictionary, and rendered by `structured.js`.
+- Cross-references inside a definition are clickable and push onto a history
+  stack; the back arrow returns to the previous word with no second lookup.
+- Previous and next word buttons move by content word, which is what makes a
+  mis-aimed fingertip cheap to fix rather than a careful re-aim.
+- 辞書 opens a manager: import a Yomitan zip with real progress, list what is
+  loaded, list what is stored but not loaded, restore it, and show usage and
+  any load problems. The zip lives in IndexedDB and comes back next visit.
+
+`reader/js/lookup.js` is the whole tap-to-definition path and owns no DOM, so
+it is tested without a browser. `reader/js/app.js` owns the rendering and the
+gestures.
+
+### The one interaction decision worth recording
+
+**Text first, margins second.** `offsetAtPoint` snaps to the nearest text,
+which is right for restoring a reading position and wrong here: with it alone,
+every tap in the margin would look up whatever word happened to be closest.
+`textOffsetAt` now requires the tap to fall inside a tracked text node's
+rectangle, and only when it does not does the old behaviour apply - the
+vertical margin strips still turn pages and the centre still toggles chrome.
+That is section 6 of the interaction doc made real: only the text block
+receives lookup taps.
+
+### Deliberately not here yet
+
+The interaction doc describes a bubble plus a sheet. Only the sheet exists,
+because a fingertip covers a bubble and the sheet is the part that has to work.
+Pencil hover, selection mode and drag-highlighting are untouched. The sheet is
+fixed and horizontal regardless of writing mode, so it reads the same in
+vertical and horizontal.
+
+### On bundled packs
+
+Both apps now pass `packs: []` and rely entirely on a local Yomitan import -
+`src/lexicon/entry.js` does the same, so we agree without having discussed
+it. That keeps a 100 MB+ blob out of the public git history permanently, which
+is the right call, and the reader says plainly that no dictionary is loaded
+instead of looking broken. If JMdict common is ever wanted as a fallback it has
+to be hosted outside the Pages repository, and that is a decision for both of
+us.
+
+### Tests
+
+9 new for the lookup controller, plus 2 page-level ones that open the
+dictionary manager in jsdom and assert it reports an empty list rather than a
+blank sheet. Full suite 253 passing.
+
 ## 2026-09-22 - the tokeniser lands, and the word river gets its pool
 
 Status: `src/dict/tokenize.js` exists and `interface-dict.md` is 1.4.
