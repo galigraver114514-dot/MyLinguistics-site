@@ -1,0 +1,238 @@
+/* MyLinguistics iOS shell: navigation bar, tab bar, bottom sheet.
+ *
+ * Structure and behaviour only; every value comes from tokens.css. The markup
+ * is static in each page, so the shell still works without JavaScript. */
+
+body.has-shell {
+  padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
+
+/* -------------------------------------------------------- navigation bar */
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding-top: var(--safe-top);
+  background: var(--material);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border-bottom: 0.5px solid var(--separator);
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--navbar-h);
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 var(--page-pad);
+}
+
+.navbar-brand {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text);
+}
+.navbar-brand:hover { text-decoration: none; }
+
+.navbar-compact-title {
+  font-size: var(--text-title);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 1;
+  transition: opacity 0.18s ease;
+}
+.navbar.has-large .navbar-compact-title { opacity: 0; }
+.navbar.has-large.is-scrolled .navbar-compact-title { opacity: 1; }
+
+.navbar-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.navbar-actions .lang-switch select {
+  min-height: 32px;
+  border-radius: var(--radius-pill);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch);
+  min-width: 36px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--text-callout);
+  font-weight: 600;
+  color: var(--tint);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--fill); }
+.icon-btn-glyph { font-size: 20px; line-height: 1; }
+
+/* ------------------------------------------------------ large title block */
+
+.navbar-large {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: var(--space-3) var(--page-pad) var(--space-4);
+}
+.large-title {
+  font-size: var(--text-large-title);
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  line-height: 1.15;
+  margin: 0;
+}
+.large-subtitle {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-callout);
+  max-width: 60ch;
+}
+
+/* ---------------------------------------------------------------- tab bar */
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  padding-bottom: var(--safe-bottom);
+  background: var(--material);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border-top: 0.5px solid var(--separator);
+}
+
+.tabbar-item {
+  flex: 1 1 0;
+  min-height: var(--tabbar-h);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 0 4px;
+  color: var(--muted);
+  font-size: var(--text-caption);
+  font-weight: 500;
+  text-decoration: none;
+}
+.tabbar-item:hover { text-decoration: none; color: var(--text); }
+.tabbar-item.is-active { color: var(--tint); }
+.tabbar-icon { width: 26px; height: 26px; display: block; }
+.tabbar-label { line-height: 1; }
+
+/* ------------------------------------------------------------------ sheet */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.sheet-backdrop.is-open { opacity: 1; }
+
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 51;
+  max-height: 82vh;
+  overflow: auto;
+  padding: var(--space-2) var(--space-4) calc(var(--space-4) + var(--safe-bottom));
+  background: var(--surface);
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  box-shadow: var(--shadow-md);
+  transform: translateY(102%);
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+.sheet.is-open { transform: translateY(0); }
+
+.sheet-grabber {
+  width: 36px;
+  height: 5px;
+  margin: 6px auto 10px;
+  border-radius: 3px;
+  background: var(--fill-2);
+  cursor: grab;
+  touch-action: none;
+}
+.sheet-title {
+  font-size: var(--text-headline);
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+/* -------------------------------------------------- embedded content box
+ * The contract with the reader (docs/coordination/interface-shell.md): the
+ * shell gives the reading surface a box it can measure, and the reader turns
+ * #viewport into height: 100% inside it. */
+.shell-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Reader actions land in the navigation bar; the shell decides the look. */
+.navbar-reader-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.navbar-reader-actions .icon-btn { font-size: var(--text-callout); }
+
+/* ------------------------------------------------------------- iOS lists */
+
+.ios-list {
+  display: grid;
+  gap: 1px;
+  background: var(--separator);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.ios-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-base);
+  text-align: left;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+.ios-row:hover { background: var(--surface-2); text-decoration: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar-compact-title,
+  .sheet,
+  .sheet-backdrop { transition: none; }
+}

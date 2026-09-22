@@ -1,6 +1,6 @@
 # iPad-first redesign: the iOS shell and the brick model
 
-Status: **decisions locked, P0 not started.** This supersedes the page and
+Status: **decisions locked; P0, the iOS shell, is implemented.** This supersedes the page and
 navigation parts of `ja-vocab-book-design.md`. The engine described there -
 schema, FSRS-6, passive track, mining funnel, shared dictionary - is reused
 unchanged.
@@ -133,11 +133,33 @@ pacing layer on top:
 
 | Phase | Contents |
 | --- | --- |
-| P0 | iOS shell and design system: tab bar, nav bar, sheets, tokens. No engine change; the 242 tests stay green. |
+| P0 | iOS shell and design system: tab bar, nav bar, sheets, tokens. No engine change; the suite stays green. **Done.** |
 | P1 | Pool and bricks: data model, bricking algorithm, brick session. DB version 3. |
 | P2 | River and net: canvas flow, drag-to-cast, catch into the pool. |
 | P3 | The two sections: Learn and Overview; the old five tabs are demoted. |
 | P4 | PWA polish: home-screen fullscreen, motion, empty and error states, touch detail. |
+
+### P0, as built
+
+| File | What it is |
+| --- | --- |
+| `assets/css/tokens.css` | design tokens: colour, spacing, radius, type, touch size, safe areas, light and dark |
+| `assets/css/shell.css` | navigation bar, tab bar, bottom sheet, iOS lists, the embedded content box |
+| `assets/js/shell.js` | active tab, collapsing large title, the more sheet, edge-swipe back, `window.Shell` |
+| `manifest.webmanifest`, `assets/apple-touch-icon.png` | home-screen launch: fullscreen, no Safari chrome |
+| `overview.html` | the third tab, a placeholder for the pool and the bricks |
+| `tests/shell.test.js` | the shell markup, the manifest, and the sheet behaviour |
+
+The tabs are `Reader / Learn / Overview`. `Home` and `About` moved into the
+navigation bar's `more` sheet. The wordbook's own five tabs are untouched: P3
+collapses them into Learn and Overview.
+
+The reader boundary is `docs/coordination/interface-shell.md`, proposed by
+agent-reader. The shell sets `document.documentElement.dataset.shell = 'on'`
+and `body.has-shell`, exposes `window.Shell`, renders whatever
+`window.Reader.actions()` returns, subscribes to `Reader.on('title')`, and
+gives the reading surface a `.shell-content` box. The z scale is bars 30,
+reader sheets 40, shell sheets 50, hover bubble 60.
 
 ## 8. Coordination
 

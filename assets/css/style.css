@@ -1,56 +1,8 @@
-/* MyLinguistics - global stylesheet for the three static pages.
-   Tokens, base, layout, header, hero, panels, buttons, forms, footer.
-   The wordbook adds its own classes in wordbook.css; the reader has reader.css. */
+/* MyLinguistics - shared component styles.
+   Design tokens live in tokens.css; the iOS shell lives in shell.css.
+   This file keeps base, layout, and the components the pages still use. */
 
-/* ------------------------------------------------------------------ tokens */
-
-:root {
-  --bg: #f6f7fb;
-  --surface: #ffffff;
-  --surface-2: #eef1f7;
-  --surface-3: #e6eaf3;
-  --text: #131722;
-  --muted: #5a6478;
-  --border: #e3e7f0;
-  --accent: #4f46e5;
-  --accent-strong: #4338ca;
-  --accent-soft: #eceafe;
-  --accent-contrast: #ffffff;
-  --success: #15803d;
-  --success-soft: #e6f5ec;
-  --danger: #dc2626;
-  --danger-soft: #fdecec;
-  --warn: #b45309;
-  --warn-soft: #fdf1e3;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 1px 2px rgba(16, 24, 40, 0.05), 0 14px 34px -20px rgba(16, 24, 40, 0.45);
-  --radius-sm: 8px;
-  --radius: 14px;
-  --radius-lg: 22px;
-  --maxw: 1080px;
-}
-
-[data-theme='dark'] {
-  --bg: #0b0e14;
-  --surface: #131824;
-  --surface-2: #1a2030;
-  --surface-3: #232a3c;
-  --text: #e8ecf5;
-  --muted: #99a3b8;
-  --border: #232a3a;
-  --accent: #8b8cf7;
-  --accent-strong: #a5a6ff;
-  --accent-soft: #1e2140;
-  --accent-contrast: #0b0e14;
-  --success: #4ade80;
-  --success-soft: #14291f;
-  --danger: #f87171;
-  --danger-soft: #2c1618;
-  --warn: #fbbf24;
-  --warn-soft: #2a2110;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 36px -22px rgba(0, 0, 0, 0.9);
-}
+/* Design tokens live in tokens.css; this file is components only. */
 
 /* -------------------------------------------------------------------- base */
 
@@ -62,8 +14,8 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  font-size: 16px;
+  font-family: var(--font);
+  font-size: var(--text-base);
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
 }

@@ -23,6 +23,9 @@ The interface switches between English, Chinese, and Japanese.
 - **Your own dictionary** - import a Yomitan JP-JP dictionary (a zip). It
   persists in the browser, backs the definitions, sharpens word segmentation,
   and feeds the word river's pool.
+- **An iPad app shell** - a global bottom tab bar (Reader / Learn / Overview),
+  a large-title navigation bar, bottom sheets, safe-area handling, and a
+  home-screen launch with no browser chrome.
 - **Data ownership** - IndexedDB holds the lexicon and the reader's books;
   localStorage holds only the interface language and the theme.
 
@@ -30,15 +33,21 @@ The interface switches between English, Chinese, and Japanese.
 
     .
     |-- index.html            Home
-    |-- study.html            The wordbook
+    |-- study.html            Learn: the wordbook
+    |-- overview.html         Overview (a placeholder until P3)
     |-- about.html            How it fits together
     |-- 404.html              Fallback page
+    |-- manifest.webmanifest  Home-screen launch metadata
     |-- assets/
-    |   |-- css/style.css     Shared stylesheet
+    |   |-- css/tokens.css    Design tokens (iOS palette, type, spacing)
+    |   |-- css/style.css     Shared component styles
+    |   |-- css/shell.css     Navigation bar, tab bar, bottom sheet
     |   |-- css/wordbook.css  Wordbook styles
     |   |-- js/data.js        The Japanese seed
     |   |-- js/i18n.js        Interface strings (en / zh / ja)
-    |   |-- js/app.js         Interface language, theme, chrome
+    |   |-- js/app.js         Interface language and theme
+    |   |-- js/shell.js       The iOS shell behaviour
+    |   |-- apple-touch-icon.png
     |   +-- favicon.svg
     |-- src/lexicon/          Wordbook engine (schema, FSRS-6, digest, river, tokeniser, IndexedDB)
     |-- src/dict/             Shared dictionary module (agent-reader)
@@ -52,7 +61,12 @@ The interface switches between English, Chinese, and Japanese.
 
 ## The wordbook
 
-`study.html` is the whole study surface.
+The app has one global shell: a bottom tab bar (Reader / Learn / Overview), a
+large-title navigation bar, and bottom sheets. `Home` and `About` sit in the
+bar's `more` sheet. Adding the app to the iPad home screen launches it
+fullscreen, with no browser chrome.
+
+`study.html` is the Learn tab and, until P3, the whole study surface.
 
 - **Review** schedules each sense with FSRS-6, recognition before production.
   A **Look only** toggle shows every answer and advances without grading.
@@ -78,8 +92,8 @@ Run the tests with Node 20 or newer:
 
 ## Languages
 
-The header carries one switch: the **interface language**, English, Chinese, or
-Japanese, stored under `ml.uilang`. The wordbook is Japanese only.
+The navigation bar carries one switch: the **interface language**, English,
+Chinese, or Japanese, stored under `ml.uilang`. The wordbook is Japanese only.
 
 ## Local preview
 

@@ -2,12 +2,22 @@
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Wordbook - MyLinguistics</title>
 <meta name="description" content="Sense-level Japanese vocabulary: monolingual definitions, FSRS review, and a passive track.">
+<meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="MyLinguistics">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="assets/css/tokens.css">
 <link rel="stylesheet" href="assets/css/style.css">
 <link rel="stylesheet" href="assets/css/wordbook.css">
+<link rel="stylesheet" href="assets/css/shell.css">
 <script>
   (function () {
     try {
@@ -19,32 +29,25 @@
   })();
 </script>
 </head>
-<body>
+<body class="has-shell">
 <a class="skip-link" href="#main" data-i18n="a11y.skip">Skip to content</a>
-<header class="site-header">
-  <div class="container header-inner">
-    <a class="brand" href="index.html">
+<header class="navbar" id="navbar">
+  <div class="navbar-inner header-inner">
+    <a class="navbar-brand" href="index.html" aria-label="MyLinguistics">
       <span class="brand-mark" aria-hidden="true">ML</span>
-      <span class="brand-name">MyLinguistics</span>
     </a>
-    <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="siteNav" data-i18n="nav.menu">Menu</button>
-    <nav class="site-nav" id="siteNav" aria-label="Main navigation">
-      <a href="index.html" data-i18n="nav.home">Home</a>
-      <a href="study.html" data-i18n="nav.study">Study</a>
-      <a href="reader/index.html" data-i18n="nav.reader">Reader</a>
-      <a href="about.html" data-i18n="nav.about">About</a>
-    </nav>
-    <button class="theme-toggle" id="themeToggle" type="button">Dark</button>
+    <span class="navbar-compact-title">MyLinguistics</span>
+    <div class="navbar-actions">
+      <button class="icon-btn" id="themeToggle" type="button">Dark</button>
+      <button class="icon-btn icon-btn-glyph" id="shellMore" type="button" aria-haspopup="dialog" aria-label="More" data-i18n-aria="shell.more">⋯</button>
+    </div>
   </div>
 </header>
+<div class="navbar-large">
+  <h1 class="large-title" data-i18n="wb.title">Wordbook</h1>
+  <p class="large-subtitle" data-i18n="wb.lede">Sense-level cards, monolingual definitions, and a passive track.</p>
+</div>
 <main id="main">
-
-  <section class="page-head">
-    <div class="container">
-      <h1 data-i18n="wb.title">Wordbook</h1>
-      <p class="lede" data-i18n="wb.lede">Sense-level cards, monolingual definitions, and a passive track.</p>
-    </div>
-  </section>
 
   <section class="section">
     <div class="container">
@@ -211,9 +214,26 @@
   </section>
 
 </main>
+
+<nav class="tabbar" id="tabbar" aria-label="Main navigation">
+  <a class="tabbar-item" href="reader/index.html" data-tab="reader">
+    <svg class="tabbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v18H6.5A2.5 2.5 0 0 1 4 18.5z"/><path d="M13 3h4.5A2.5 2.5 0 0 1 20 5.5v13a2.5 2.5 0 0 1-2.5 2.5H13z"/></svg>
+    <span class="tabbar-label" data-i18n="nav.reader">Reader</span>
+  </a>
+  <a class="tabbar-item" href="study.html" data-tab="learn">
+    <svg class="tabbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 12 4l9 4.5-9 4.5z"/><path d="M7 10.7V16c0 1.1 2.2 2 5 2s5-.9 5-2v-5.3"/></svg>
+    <span class="tabbar-label" data-i18n="nav.study">Study</span>
+  </a>
+  <a class="tabbar-item" href="overview.html" data-tab="overview">
+    <svg class="tabbar-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11"/><path d="M10 20V4"/><path d="M16 20v-6"/><path d="M2 20h20"/></svg>
+    <span class="tabbar-label" data-i18n="nav.overview">Overview</span>
+  </a>
+</nav>
+
 <script src="assets/js/data.js"></script>
 <script src="assets/js/i18n.js"></script>
 <script src="assets/js/app.js"></script>
+<script src="assets/js/shell.js"></script>
 <script type="module" src="src/lexicon/entry.js"></script>
 <footer class="site-footer">
   <div class="container footer-inner">

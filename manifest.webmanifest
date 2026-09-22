@@ -1,0 +1,15 @@
+{
+  "name": "MyLinguistics",
+  "short_name": "MyLinguistics",
+  "description": "A personal reading and vocabulary workspace.",
+  "start_url": "./study.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f2f2f7",
+  "theme_color": "#f2f2f7",
+  "icons": [
+    { "src": "assets/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
