@@ -68,8 +68,24 @@ window.ML = (function () {
     });
   }
 
+  function currentTheme() {
+    return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  }
+
+  /* One place decides what the theme is and remembers it. The capsule has room
+   * for the interface language and the more button and nothing else, so the
+   * appearance control lives in the more sheet and calls this. */
+  function setTheme(next) {
+    var value = next === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', value);
+    try { window.localStorage.setItem(THEME_KEY, value); } catch (err) { /* ignore */ }
+    return value;
+  }
+
   function buildUiLangSwitch() {
-    var header = document.querySelector('.header-inner');
+    /* The capsule has a slot for this; `.header-inner` is what older pages have
+     * and what tests/lang-switch.test.js builds its fixture from. */
+    var header = $('siteUiLangWrap') || document.querySelector('.header-inner');
     if (!header) return null;
     var i18n = window.ML_I18N;
     var codes = i18n ? i18n.SUPPORTED : ['en'];
@@ -117,9 +133,7 @@ window.ML = (function () {
     if (toggle) {
       syncToggle();
       toggle.addEventListener('click', function () {
-        var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        root.setAttribute('data-theme', next);
-        try { window.localStorage.setItem(THEME_KEY, next); } catch (err) { /* ignore */ }
+        setTheme(currentTheme() === 'dark' ? 'light' : 'dark');
         syncToggle();
       });
     }
@@ -154,6 +168,8 @@ window.ML = (function () {
     escapeHtml: escapeHtml,
     uiLang: uiLang,
     setUiLang: setUiLang,
+    currentTheme: currentTheme,
+    setTheme: setTheme,
     t: t,
     applyI18n: applyI18n
   };

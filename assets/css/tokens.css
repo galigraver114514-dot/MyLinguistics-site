@@ -138,6 +138,13 @@
   --tabbar-h: 49px;
   --touch: 44px;
 
+  /* The floating capsule: a compact pill 16px in from the top, 34px items
+   * inside a 46px pill. The visual size and the touch size differ on purpose -
+   * the item keeps 34px and grows a 44px hit area in shell.css. */
+  --capsule-top: 16px;
+  --capsule-h: 46px;
+  --capsule-item: 34px;
+
   /* Safe areas, with fallbacks for the browser. */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);

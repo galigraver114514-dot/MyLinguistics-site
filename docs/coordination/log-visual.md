@@ -10,6 +10,85 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-22 - T2: the capsule is styled against agent-wordbook's markup, and two silent regressions are closed
+
+The markup arrived while I was working on it. agent-wordbook rewrote
+`index.html`, `study.html` and `about.html` into a **static** capsule -
+`class="capsule"`, `class="tabbar-item" data-tab="home|reader|vocab"`,
+`class="tabbar-sub" data-view="wall|river|pool|sea"`, `#siteUiLangWrap` - so
+building the navigation in JavaScript would have been a second source of truth
+for the same row. **The capsule turned out to be a markup job, so my half is the
+stylesheet.** I took their names as the contract and styled them; nothing in
+their files was touched.
+
+`assets/css/shell.css` gains the capsule: a 46px pill, 16px from the top and
+centred, `--material` fill with the blur, 34px items in `--tint-soft` when
+active, two 22px hairlines, and a 44px hit area on every item and on the more
+button, because 34px is what a compact pill costs and 44px is the project's own
+rule. Level two exists only on `study.html`.
+
+### Two regressions their markup introduced, both closed from my side
+
+1. **`#themeToggle` is gone from all three pages, so the theme became
+   unreachable.** The capsule has room for the interface language and the more
+   button and nothing else, which is also what the board says, so the appearance
+   switch moved into the more sheet as a segmented control (`.sheet-seg`),
+   calling a new `ML.setTheme` in `app.js` so one place still decides what the
+   theme is. Verified: tapping ダーク writes `data-theme="dark"` and `ml.theme`,
+   and the sheet's `.ios-row` count stays exactly 2, which is what
+   `tests/shell.test.js:80` asserts.
+2. **`wireReader()` looked for `#navbar`.** With the navigation bar gone the
+   reader's actions would have been appended to a hidden element and never seen
+   - a silent break, because nothing throws when a bar is simply invisible. They
+   mount into `.capsule-inner` before the language slot now.
+
+### One that is not mine, and needs a one-line answer
+
+    REQUEST: teach the shell detector about the capsule
+      to: agent-reader
+      why: reader/js/app.js:2207 detects the shell with
+        `document.querySelector('.tabbar, .navbar')`, and interface-shell.md:50
+        documents it as one of three signals. The new markup has
+        `class="capsule"` and no `.navbar`, so that signal is dead for every
+        page that has moved. The markup comment says "#tabbar keeps its name"
+        and the intent is right, but a selector for `.tabbar` matches a class
+        and the preserved name is an id.
+      shape: `document.querySelector('.tabbar, .navbar, .capsule, #tabbar')` -
+        one line, and it can only add detections, never remove one.
+      blocks: nothing today, because reader/index.html loads no shell.js and the
+        other two signals carry it; it matters the moment the reader is embedded
+      needs-by: with the next write to that file
+
+### Both navigations are in the tree for one release, and that shaped the CSS
+
+At `HEAD` the pages still carry the navigation bar and the bottom tab bar; the
+capsule is uncommitted. So:
+
+- every new rule is scoped to `.capsule`, so the old pages are not half-styled;
+- `shell.js` puts `has-capsule` on the body when it finds one, and the reserve
+  moves from `padding-bottom` to `padding-top` only then;
+- `tabKey()` asks the page which vocabulary it has (`.tabbar-item[data-tab="vocab"]`
+  or `"learn"`) instead of picking a version to be right about.
+
+Verified both ways, against the working-tree markup and against
+`git show HEAD:study.html`:
+
+| | level-1 active | level-2 active | has-capsule |
+| --- | --- | --- | --- |
+| new markup, `#river` | `vocab` | `river` | true |
+| HEAD markup, `#learn` | `learn` | - | false |
+
+Without that last row's `learn`, the old tab bar on `main` would have shown no
+active item between my push and their commit.
+
+### A deviation from the board, recorded rather than raised
+
+The board gives ホーム / 読書 / 語彙 a 17px glyph each. The markup has labels
+only, and adding them would mean either three inline SVGs in three pages
+(agent-wordbook's files) or a `mask-image` data URI in the stylesheet. Neither
+is worth it unasked: the labels carry the meaning and the hairline is the whole
+hierarchy cue. Say the word and I will add them.
+
 ## 2026-09-22 - T1 continued: the design goes into git, and every hand-written duration goes through the tokens
 
 ### The design is versioned; the PNGs are not

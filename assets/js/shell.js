@@ -12,13 +12,30 @@
     return window.ML && window.ML.t ? window.ML.t(key) : key;
   }
 
+  /* The route and the markup agree on these names. The static capsule carries
+   * data-tab on its level-one items and data-view on its level-two items, and
+   * it is also the navigation a page has when JavaScript never runs - so the
+   * keys here are read off the markup rather than invented. */
   function tabKey() {
     var path = window.location.pathname;
     if (path.indexOf('/reader/') >= 0) return 'reader';
     var file = path.split('/').pop() || 'index.html';
-    if (file === 'study.html') return window.location.hash === '#overview' ? 'overview' : 'learn';
-    if (file === 'overview.html') return 'overview';
+    if (file === 'study.html') {
+      /* The capsule calls this section vocab; the tab bar it replaces called it
+       * learn. Ask the page which one it has rather than pick a version to be
+       * right about - both markups are in the tree for one release. */
+      return document.querySelector('.tabbar-item[data-tab="vocab"]') ? 'vocab' : 'learn';
+    }
+    if (file === 'index.html') return 'home';
     return '';
+  }
+
+  /* study.html is one page with four routes in the hash; a bare study.html
+   * lands on the wall, which is the first of the four. */
+  function viewKey() {
+    var hash = window.location.hash || '';
+    if (hash === '#river' || hash === '#pool' || hash === '#sea') return hash.slice(1);
+    return 'wall';
   }
 
   function markActiveTab() {
@@ -29,6 +46,14 @@
       items[i].classList.toggle('is-active', active);
       if (active) items[i].setAttribute('aria-current', 'page');
       else items[i].removeAttribute('aria-current');
+    }
+    var view = viewKey();
+    var subs = document.querySelectorAll('.tabbar-sub');
+    for (var j = 0; j < subs.length; j++) {
+      var current = subs[j].getAttribute('data-view') === view;
+      subs[j].classList.toggle('is-active', current);
+      if (current) subs[j].setAttribute('aria-current', 'page');
+      else subs[j].removeAttribute('aria-current');
     }
   }
 
@@ -91,12 +116,46 @@
     handle.addEventListener('pointercancel', end);
   }
 
+  function setTheme(value) {
+    if (window.ML && typeof window.ML.setTheme === 'function') window.ML.setTheme(value);
+  }
+
+  /* A sheet may carry one segmented control above its list. The appearance
+   * switch lives here because the capsule has room for the interface language
+   * and the more button and nothing else, and the navigation bar that used to
+   * hold it is gone. It is deliberately not an `.ios-row`, so a sheet's list
+   * stays exactly as long as its data. */
+  function buildSegments(spec) {
+    var track = document.createElement('div');
+    track.className = 'sheet-seg';
+    (spec.items || []).forEach(function (item) {
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'sheet-seg-item';
+      button.textContent = item.label;
+      button.setAttribute('aria-pressed', item.selected ? 'true' : 'false');
+      if (item.selected) button.classList.add('is-active');
+      button.addEventListener('click', function () {
+        var nodes = track.querySelectorAll('.sheet-seg-item');
+        for (var i = 0; i < nodes.length; i++) {
+          var on = nodes[i] === button;
+          nodes[i].classList.toggle('is-active', on);
+          nodes[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        item.onSelect();
+      });
+      track.appendChild(button);
+    });
+    return track;
+  }
+
   function openSheet(options) {
     if (!sheetParts) sheetParts = buildSheet();
     var opts = options || {};
     sheetParts.sheet.querySelector('.sheet-title').textContent = opts.title || '';
     var body = sheetParts.sheet.querySelector('.sheet-body');
     body.innerHTML = '';
+    if (opts.segments) body.appendChild(buildSegments(opts.segments));
     var list = document.createElement('div');
     list.className = 'ios-list';
     (opts.items || []).forEach(function (item) {
@@ -131,8 +190,15 @@
     var more = document.getElementById('shellMore');
     if (!more) return;
     more.addEventListener('click', function () {
+      var theme = window.ML && window.ML.currentTheme ? window.ML.currentTheme() : 'light';
       openSheet({
         title: t('shell.more'),
+        segments: {
+          items: [
+            { label: t('theme.toLight'), selected: theme === 'light', onSelect: function () { setTheme('light'); } },
+            { label: t('theme.toDark'), selected: theme === 'dark', onSelect: function () { setTheme('dark'); } }
+          ]
+        },
         items: [
           { label: t('shell.home'), href: 'index.html' },
           { label: t('shell.about'), href: 'about.html' }
@@ -164,6 +230,11 @@
   function markShell() {
     document.documentElement.setAttribute('data-shell', 'on');
     document.body.classList.add('has-shell');
+    /* Which navigation this page actually has. The capsule is at the top and
+     * reserves space above the content; the tab bar this replaced was at the
+     * bottom. Both markups exist in the tree for one release, so the class is
+     * read from the document rather than assumed from a version. */
+    if (document.querySelector('.capsule')) document.body.classList.add('has-capsule');
   }
 
   /* The reader owns its toolbar; the shell only renders what it declares
@@ -171,14 +242,19 @@
   function wireReader() {
     var reader = window.Reader;
     if (!reader || typeof reader.actions !== 'function') return;
-    var navbar = document.getElementById('navbar');
-    if (!navbar) return;
+    /* The reader's actions land in the capsule's right-hand controls, before
+     * the interface-language slot. The navigation bar they used to land in is
+     * gone, and a hidden bar would have swallowed them without a sound. */
+    var bar = document.querySelector('.capsule-inner') || document.getElementById('navbar');
+    if (!bar) return;
 
     var host = document.createElement('div');
     host.className = 'navbar-reader-actions';
-    var actionsHost = navbar.querySelector('.navbar-actions');
-    if (actionsHost && actionsHost.parentNode) actionsHost.parentNode.insertBefore(host, actionsHost);
-    else navbar.querySelector('.navbar-inner').appendChild(host);
+    var slot = bar.querySelector('.capsule-lang') || bar.querySelector('#siteUiLangWrap');
+    var actionsHost = bar.querySelector('.navbar-actions');
+    if (slot && slot.parentNode) slot.parentNode.insertBefore(host, slot);
+    else if (actionsHost && actionsHost.parentNode) actionsHost.parentNode.insertBefore(host, actionsHost);
+    else bar.appendChild(host);
 
     (reader.actions() || []).forEach(function (action) {
       var button = document.createElement('button');

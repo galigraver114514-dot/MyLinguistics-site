@@ -10,6 +10,15 @@ body.has-shell {
   -webkit-touch-callout: none;
 }
 
+/* The capsule is at the top, so the reserve moves with it. Both navigations
+ * exist in the tree for one release - the tab bar is what pages still carry
+ * until the markup lands - so shell.js puts `has-capsule` on the body when it
+ * finds one, and this reads the document instead of guessing at a version. */
+body.has-shell.has-capsule {
+  padding-bottom: 0;
+  padding-top: calc(var(--capsule-top) + var(--capsule-h) + var(--space-3));
+}
+
 /* -------------------------------------------------------- navigation bar */
 
 .navbar {
@@ -106,7 +115,162 @@ body.has-shell {
   max-width: 60ch;
 }
 
-/* ---------------------------------------------------------------- tab bar */
+/* ------------------------------------------------------- floating capsule
+ *
+ * The navigation is written statically into each page and it is also what a
+ * page has when JavaScript never runs, so every rule here styles markup that
+ * already exists. One row: brand, the three level-one items, a hairline, the
+ * four level-two items, a second hairline, then the interface language and the
+ * more button.
+ *
+ * The hierarchy cue is the hairline and nothing else - no second colour, no
+ * second bar, no nested track. The level-two items carry no icons, and once
+ * the level-one items lose theirs too the hairline is doing all the work.
+ *
+ * Everything is scoped to `.capsule` because the tab bar this replaces is
+ * still in the tree for one release; scoping is what keeps that release's
+ * pages looking right instead of half-restyled.
+ */
+
+.capsule {
+  position: fixed;
+  top: calc(var(--capsule-top) + var(--safe-top));
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  /* The row spans the viewport so the pill can centre in it, but only the pill
+   * itself should catch a tap. */
+  pointer-events: none;
+}
+
+.capsule-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--capsule-h);
+  padding: 6px;
+  pointer-events: auto;
+  background: var(--material);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+  border: 0.5px solid var(--separator);
+  border-radius: calc(var(--capsule-h) / 2);
+}
+
+.capsule-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--tint);
+  color: var(--tint-contrast);
+  text-decoration: none;
+}
+.capsule-brand:hover { text-decoration: none; }
+.capsule .brand-mark {
+  display: block;
+  width: auto;
+  height: auto;
+  background: none;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+.capsule .tabbar-item,
+.capsule .tabbar-sub {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: var(--capsule-item);
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--capsule-item) / 2);
+  color: var(--muted);
+  font-size: var(--text-callout);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* 34px is what a compact pill costs; 44px is the project's own rule. The item
+ * keeps its size and grows a hit area, so neither has to be given up. */
+.capsule .tabbar-item::after,
+.capsule .tabbar-sub::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--touch);
+  transform: translateY(-50%);
+}
+
+.capsule .tabbar-item:hover,
+.capsule .tabbar-sub:hover { color: var(--text); text-decoration: none; }
+
+.capsule .tabbar-item.is-active,
+.capsule .tabbar-sub.is-active {
+  background: var(--tint-soft);
+  color: var(--tint);
+}
+
+.capsule .capsule-rule {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 22px;
+  background: var(--separator);
+}
+
+.capsule .capsule-lang { display: inline-flex; align-items: center; }
+.capsule .capsule-lang .lang-switch { display: inline-flex; }
+.capsule .capsule-lang select {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  min-height: var(--capsule-item);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: calc(var(--capsule-item) / 2);
+  background: transparent;
+  color: var(--tint);
+  font: inherit;
+  font-size: var(--text-callout);
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+}
+
+.capsule .icon-btn {
+  position: relative;
+  min-height: var(--capsule-item);
+  min-width: auto;
+  padding: 0 var(--space-2);
+  border-radius: calc(var(--capsule-item) / 2);
+}
+/* The same hit-area trick as the items: the button stays inside the pill and
+ * the target still clears 44px. */
+.capsule .icon-btn::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: var(--touch);
+  transform: translateY(-50%);
+}
+.capsule .icon-btn:hover { background: var(--fill); }
+
+/* ---------------------------------------------------------------- tab bar
+ * Retiring: the pages still carry this markup for one release, and it goes
+ * when they stop. Nothing new should be added here. */
 
 .tabbar {
   position: fixed;
@@ -183,6 +347,36 @@ body.has-shell {
   font-size: var(--text-headline);
   font-weight: 600;
   margin: 0 0 var(--space-3);
+}
+
+/* One segmented control above the list - the appearance switch, which the
+ * capsule has no room for. Deliberately not an `.ios-row`, so a sheet's list
+ * stays exactly as long as its data. */
+.sheet-seg {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: var(--space-3);
+  background: var(--surface-2);
+  border-radius: calc(var(--capsule-item) / 2 + 6px);
+}
+.sheet-seg-item {
+  flex: 1 1 0;
+  min-height: var(--capsule-item);
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: var(--text-callout);
+  font-weight: 600;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--capsule-item) / 2);
+  cursor: pointer;
+}
+.sheet-seg-item.is-active {
+  background: var(--surface);
+  color: var(--tint);
+  box-shadow: var(--shadow-sm);
 }
 
 /* -------------------------------------------------- embedded content box
