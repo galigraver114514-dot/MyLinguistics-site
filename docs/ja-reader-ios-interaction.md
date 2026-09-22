@@ -250,3 +250,35 @@ only branch is the furigana trigger: hover on desktop, tap or Pencil hover on
 iPad. Everything else is shared. Keyboard shortcuts are worth wiring up on both,
 because the user may attach a Magic Keyboard to the iPad, where they matter as
 much as on a desktop.
+
+## 15. Implementation status
+
+Written after the fact, so the plan above stays the plan and this section says
+what is actually built.
+
+| Gesture | State |
+| --- | --- |
+| Finger tap on text | done - looks up the word and opens the sheet |
+| Finger tap outside the text block | done - margins page-turn, the centre toggles chrome |
+| Finger horizontal swipe | done |
+| Finger double tap on text | done - sentence, then paragraph on a repeat |
+| Pencil tap on text | done - precise lookup, same sheet |
+| Pencil drag across text | done - highlights, snapped to whole words, persisted |
+| Pencil hover | done - reading preview once the tip rests on one word |
+| Keyboard Space and arrows | done |
+| Two-finger pinch / two-finger tap | not implemented |
+| Finger long press | not implemented; nothing pins yet |
+
+Deviations worth knowing:
+
+- The bubble exists only for Pencil hover. A finger tap goes straight to the
+  sheet, because the finger covers the bubble's own anchor and two taps to read
+  one word is one too many.
+- Selection has no drag handles and no native selection mode. Double tap is the
+  only way in; the action bar is 蛍光 / コピー / 辞書 / 解除.
+- Highlights use the Custom Highlight API, so there is no span-wrapping
+  fallback yet, and therefore no clickable note marker. Notes need that marker
+  and are the reason the fallback stays on the list.
+- Generated furigana does not exist, so Pencil hover shows a reading only for
+  words the loaded dictionary knows. After a Yomitan import that is most content
+  words; before one it is almost none.

@@ -339,3 +339,59 @@ button.on { background: var(--accent); border-color: var(--accent); color: var(-
 .dict-list li { border-top: 1px solid var(--line); padding: 9px 0; font-size: 0.86rem; }
 .dict-list li:first-child { border-top: 0; }
 .dict-list .meta { display: block; color: var(--muted); font-size: 0.72rem; }
+
+/* --------------------------------------------------- hover and selection */
+
+#hover-bubble {
+  position: fixed;
+  z-index: 60;
+  max-width: 62vw;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bar);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  writing-mode: horizontal-tb;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif;
+}
+#hover-bubble[hidden] { display: none; }
+#hover-word { font-size: 0.98rem; }
+#hover-reading { font-size: 0.82rem; color: var(--muted); }
+
+#select-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  background: var(--bar);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.16);
+  writing-mode: horizontal-tb;
+}
+#select-bar[hidden] { display: none; }
+#select-info {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#select-bar button { min-width: 40px; padding: 6px 10px; font-size: 0.8rem; }
+
+/* Painted by the Custom Highlight API; ignored where it is unsupported. */
+::highlight(reader-highlight) { background-color: rgba(255, 209, 92, 0.55); }
+::highlight(reader-draft) { background-color: rgba(255, 209, 92, 0.30); }
+::highlight(reader-selection) { background-color: rgba(122, 92, 62, 0.26); }
+::highlight(reader-hover) { background-color: rgba(122, 92, 62, 0.16); }

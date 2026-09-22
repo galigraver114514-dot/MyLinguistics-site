@@ -21,7 +21,7 @@
  *   occasionally picked; stepping to the previous or next word is one tap rather
  *   than a careful re-aim, which is what makes the mistake cheap.
  */
-import { segment, tokenAt, isContent } from '../../src/dict/tokenize.js?v=5';
+import { segment, tokenAt, isContent, splitSentences } from '../../src/dict/tokenize.js?v=6';
 
 const MAX_HISTORY = 50;
 
@@ -63,6 +63,7 @@ export function createLookup(options = {}) {
 
   let text = '';
   let tokens = null;
+  let sentenceList = null;
   let history = [];
   let position = -1;
 
@@ -77,6 +78,7 @@ export function createLookup(options = {}) {
   function setText(value) {
     text = typeof value === 'string' ? value : '';
     tokens = null;
+    sentenceList = null;
     history = [];
     position = -1;
     return text.length;
@@ -88,6 +90,11 @@ export function createLookup(options = {}) {
       tokens = segment(text, lex ? { lexicon: lex } : undefined);
     }
     return tokens;
+  }
+
+  function allSentences() {
+    if (sentenceList === null) sentenceList = splitSentences(text);
+    return sentenceList;
   }
 
   /** Indices worth offering as a word: content words, or everything if none. */
@@ -157,6 +164,11 @@ export function createLookup(options = {}) {
     };
   }
 
+  /** A lookup that does not touch the history, for the Pencil hover preview. */
+  async function peek(surface) {
+    return look(surface, null, 'peek');
+  }
+
   function push(view) {
     history.push(view);
     if (history.length > MAX_HISTORY) history.shift();
@@ -215,6 +227,9 @@ export function createLookup(options = {}) {
     setText: setText,
     text: function () { return text; },
     tokenCount: function () { return allTokens().length; },
+    tokens: function () { return allTokens(); },
+    sentences: allSentences,
+    peek: peek,
     wordAt: wordAt,
     tokenIndexAt: tokenIndexAt,
     atOffset: atOffset,

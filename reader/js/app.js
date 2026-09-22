@@ -13,13 +13,16 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=5';
-import { buildChapter } from './text-model.js?v=5';
-import { prepareAndMount } from './render.js?v=5';
-import { SAMPLE_BOOK } from './sample.js?v=5';
-import { createLookup } from './lookup.js?v=5';
-import { createDictionary } from '../../src/dict/index.js?v=5';
-import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=5';
+import { openEpub } from './epub.js?v=6';
+import { buildChapter } from './text-model.js?v=6';
+import { prepareAndMount } from './render.js?v=6';
+import { SAMPLE_BOOK } from './sample.js?v=6';
+import { createLookup } from './lookup.js?v=6';
+import { createDictionary } from '../../src/dict/index.js?v=6';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=6';
+import { createPainter } from './highlight.js?v=6';
+import { openAnnotations } from './annotations.js?v=6';
+import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=6';
 
 /**
  * Bumped together with the query strings above.
@@ -30,7 +33,7 @@ import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structu
  * running version is visible on screen, which is the only way to tell a stale
  * cache apart from a real bug from a bug report.
  */
-const APP_VERSION = 'js r5';
+const APP_VERSION = 'js r6';
 
 const SETTINGS_KEY = 'reader.settings.v2';
 const POSITIONS_KEY = 'reader.positions.v2';
@@ -72,7 +75,16 @@ const els = {
   dictNext: document.getElementById('dict-next'),
   dictClose: document.getElementById('dict-close'),
   dictButton: document.getElementById('btn-dict'),
-  dictInput: document.getElementById('dict-input')
+  dictInput: document.getElementById('dict-input'),
+  hoverBubble: document.getElementById('hover-bubble'),
+  hoverWord: document.getElementById('hover-word'),
+  hoverReading: document.getElementById('hover-reading'),
+  selectBar: document.getElementById('select-bar'),
+  selectInfo: document.getElementById('select-info'),
+  selectHighlight: document.getElementById('select-highlight'),
+  selectCopy: document.getElementById('select-copy'),
+  selectDict: document.getElementById('select-dict'),
+  selectClear: document.getElementById('select-clear')
 };
 
 const state = {
@@ -92,8 +104,20 @@ const state = {
   lookupPromise: null,
   dictOffset: -1,
   dictStyles: new Set(),
-  sourceTitles: new Map()
+  sourceTitles: new Map(),
+  annotations: [],
+  selection: null,
+  draftRange: null,
+  hoverRange: null,
+  annotationStore: null
 };
+
+// Created once, at module load. Where the Custom Highlight API is missing the
+// annotation layer degrades to a no-op rather than throwing on every repaint.
+state.painter = createPainter({
+  highlights: typeof CSS !== 'undefined' ? CSS.highlights : null,
+  Highlight: typeof Highlight !== 'undefined' ? Highlight : null
+});
 
 const busyEl = document.createElement('div');
 busyEl.id = 'busy';
@@ -341,6 +365,7 @@ function applyLayout() {
   document.documentElement.setAttribute('data-theme', state.settings.theme);
   document.documentElement.style.setProperty('--reader-size', state.settings.fontSize + 'px');
   invalidateRects();
+  scheduleRepaint();
 }
 
 function paginate() {
@@ -462,8 +487,10 @@ async function showChapter(index, offset) {
     await renderInto(html);
 
     state.model = buildChapter(els.content);
+    await loadAnnotations();
     refreshLookupText();
     closeDict();
+    clearSelection();
     applyLayout();
     paginate();
 
@@ -472,6 +499,7 @@ async function showChapter(index, offset) {
     if (offset && offset > 0) restoreOffset(offset);
     else goToPage(0);
     updatePageInfo();
+    repaintHighlights();
   } finally {
     busy(false);
   }
@@ -1048,6 +1076,298 @@ async function importDictionary(file) {
   }
 }
 
+/* ------------------------------------------------------------- annotations */
+
+function getAnnotationStore() {
+  if (!state.annotationStore) {
+    state.annotationStore = openAnnotations().catch(function () { return null; });
+  }
+  return state.annotationStore;
+}
+
+async function loadAnnotations() {
+  state.annotations = [];
+  state.selection = null;
+  state.draftRange = null;
+  state.hoverRange = null;
+  if (!state.book) return;
+  try {
+    const store = await getAnnotationStore();
+    if (store) state.annotations = await store.list(state.book.key, state.index);
+  } catch (error) {
+    state.annotations = [];
+  }
+}
+
+function repaintHighlights() {
+  const painter = state.painter;
+  const model = state.model;
+  if (!painter || !model) return;
+
+  function paintOne(name, span, priority) {
+    if (!span || !isRange(span)) {
+      painter.clear(name);
+      return;
+    }
+    const range = model.rangeFor(span.start, span.end);
+    if (range) painter.paint(name, [range], { priority: priority });
+    else painter.clear(name);
+  }
+
+  const marks = [];
+  for (let i = 0; i < state.annotations.length; i++) {
+    const annotation = state.annotations[i];
+    const range = model.rangeFor(annotation.start, annotation.end);
+    if (range) marks.push(range);
+  }
+  painter.paint('reader-highlight', marks, { priority: 1 });
+  paintOne('reader-selection', state.selection, 3);
+  paintOne('reader-draft', state.draftRange, 2);
+  paintOne('reader-hover', state.hoverRange, 2);
+}
+
+/**
+ * Highlights are painted on the next frame, after the content has been laid
+ * out. Registering one against a subtree with no boxes is the failure the spike
+ * found: it is silent and permanent.
+ */
+function scheduleRepaint() {
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(function () { repaintHighlights(); });
+  } else {
+    repaintHighlights();
+  }
+}
+
+async function addAnnotation(span) {
+  if (!state.book || !state.model || !isRange(span)) return null;
+  const record = {
+    id: 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    book: state.book.key,
+    chapter: state.index,
+    start: span.start,
+    end: span.end,
+    text: state.model.slice(span.start, span.end).slice(0, 120),
+    color: 'yellow',
+    createdAt: new Date().toISOString()
+  };
+  state.annotations.push(record);
+  repaintHighlights();
+  try {
+    const store = await getAnnotationStore();
+    if (store) await store.put(record);
+  } catch (error) {
+    // It is already visible; only persistence is lost.
+  }
+  return record;
+}
+
+function wordRangeAtOffset(offset) {
+  if (!state.lookup) return null;
+  const token = state.lookup.wordAt(offset);
+  return token ? { start: token.start, end: token.end } : null;
+}
+
+/**
+ * The paragraph around an offset. Only the DOM can answer this: baseText joins
+ * paragraphs with nothing at all, so a text-only heuristic would return the
+ * whole chapter as one paragraph.
+ */
+function paragraphRangeAt(offset) {
+  if (!state.model || !state.model.length) return null;
+  const located = state.model.nodeAt(offset);
+  if (!located || !located.node) return null;
+  let block = located.node;
+  if (block.nodeType === 3) block = block.parentNode;
+  while (block && block.parentNode && block.parentNode !== els.content) block = block.parentNode;
+  if (!block || block === els.content || block.parentNode !== els.content) return null;
+
+  const walker = document.createTreeWalker(block, 4);
+  let start = -1;
+  let end = -1;
+  let node = walker.nextNode();
+  while (node) {
+    const first = state.model.offsetAt(node, 0);
+    const last = state.model.offsetAt(node, node.data.length);
+    if (first >= 0 && last >= 0) {
+      if (start < 0 || first < start) start = first;
+      if (last > end) end = last;
+    }
+    node = walker.nextNode();
+  }
+  if (start < 0 || end <= start) return null;
+  return { start: start, end: end };
+}
+
+function enterSelection(offset) {
+  if (!state.model) return;
+  if (!state.lookup) {
+    getLookup().then(function () { enterSelection(offset); }).catch(function () {});
+    return;
+  }
+  closeDict();
+  const granularity = cycleGranularity(state.selection ? state.selection.granularity : null);
+  const span = rangeFor(granularity, offset, {
+    wordAt: wordRangeAtOffset,
+    sentences: state.lookup.sentences(),
+    paragraphAt: paragraphRangeAt
+  });
+  if (!isRange(span)) return;
+  state.selection = { start: span.start, end: span.end, granularity: granularity };
+  repaintHighlights();
+  showSelectBar();
+}
+
+function clearSelection() {
+  state.selection = null;
+  if (els.selectBar) els.selectBar.hidden = true;
+  repaintHighlights();
+}
+
+function showSelectBar() {
+  if (!state.selection || !state.model) {
+    els.selectBar.hidden = true;
+    return;
+  }
+  const label = state.selection.granularity === 'paragraph' ? '段落' : '文';
+  const text = state.model.slice(state.selection.start, state.selection.end);
+  els.selectInfo.textContent = label + '：' + preview(text, 20);
+  els.selectBar.hidden = false;
+}
+
+async function copySelection() {
+  if (!state.selection || !state.model) return;
+  const text = state.model.slice(state.selection.start, state.selection.end);
+  try {
+    if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+      throw new Error('no clipboard API');
+    }
+    await navigator.clipboard.writeText(text);
+  } catch (error) {
+    // The textarea trick still works inside a user gesture, which this is.
+    try {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      document.body.removeChild(area);
+    } catch (inner) {
+      alert('コピーできませんでした');
+    }
+  }
+}
+
+/* ------------------------------------------------------------- Pencil */
+
+function hideHover() {
+  clearTimeout(hoverTimer);
+  hoverTimer = 0;
+  hoverToken = null;
+  const had = !!state.hoverRange;
+  state.hoverRange = null;
+  if (had && state.painter) repaintHighlights();
+  els.hoverBubble.hidden = true;
+}
+
+/** Keep the bubble inside the visual viewport, and clear of the Pencil tip. */
+function moveHoverBubble(x, y) {
+  const size = els.hoverBubble.getBoundingClientRect();
+  const view = typeof window !== 'undefined' ? window.visualViewport : null;
+  const width = (view && view.width) || (typeof window !== 'undefined' ? window.innerWidth : 0) || 0;
+  const height = (view && view.height) || (typeof window !== 'undefined' ? window.innerHeight : 0) || 0;
+  const left = Math.max(8, Math.min(x + 14, width - size.width - 8));
+  let top = y - size.height - 14;
+  if (top < 8) top = y + 18;
+  if (top + size.height > height - 8) top = Math.max(8, height - size.height - 8);
+  els.hoverBubble.style.left = Math.round(left) + 'px';
+  els.hoverBubble.style.top = Math.round(top) + 'px';
+}
+
+/**
+ * Pencil hover: preview the reading of the word under the tip.
+ *
+ * The lookup is delayed until the tip has rested on one word, because a moving
+ * Pencil crosses several words a second and a dictionary hit per move would
+ * inflate banks for words the reader only passed over.
+ */
+function onHoverMove(x, y) {
+  if (!state.model) return;
+  if (!state.lookup) {
+    getLookup().catch(function () {});
+    return;
+  }
+  const offset = offsetAtPoint(x, y);
+  const token = offset >= 0 ? state.lookup.wordAt(offset) : null;
+  if (!token) { hideHover(); return; }
+
+  if (hoverToken && token.start === hoverToken.start && token.end === hoverToken.end) {
+    moveHoverBubble(x, y);
+    return;
+  }
+  hoverToken = token;
+  state.hoverRange = { start: token.start, end: token.end };
+  repaintHighlights();
+  clearTimeout(hoverTimer);
+  hoverTimer = setTimeout(function () { showHoverReading(token, x, y); }, 120);
+}
+
+async function showHoverReading(token, x, y) {
+  if (!state.lookup) return;
+  try {
+    const view = await state.lookup.peek(token.surface);
+    if (!hoverToken || hoverToken.start !== token.start) return;
+    const entry = view.entries.length ? view.entries[0] : null;
+    const reading = entry && entry.reading ? entry.reading : '';
+    if (!reading) { els.hoverBubble.hidden = true; return; }
+    els.hoverWord.textContent = token.surface;
+    els.hoverReading.textContent = reading;
+    els.hoverBubble.hidden = false;
+    moveHoverBubble(x, y);
+  } catch (error) {
+    els.hoverBubble.hidden = true;
+  }
+}
+
+function startPencil(event) {
+  if (!state.model) return;
+  const offset = offsetAtPoint(event.clientX, event.clientY);
+  if (offset < 0) return;
+  hideHover();
+  pencil = { start: offset, last: offset, moved: false };
+  state.draftRange = null;
+}
+
+function movePencil(event) {
+  if (!pencil) return;
+  const offset = offsetAtPoint(event.clientX, event.clientY);
+  if (offset < 0) return;
+  if (offset !== pencil.last) pencil.moved = true;
+  pencil.last = offset;
+  if (!pencil.moved) return;
+  state.draftRange = dragRange(pencil.start, offset, wordRangeAtOffset);
+  repaintHighlights();
+}
+
+/** A still Pencil is a precise tap-to-look-up; a moving one is a highlighter. */
+async function endPencil() {
+  const current = pencil;
+  pencil = null;
+  if (!current) return;
+  if (!current.moved) {
+    state.draftRange = null;
+    repaintHighlights();
+    await showLookupAt(current.start);
+    return;
+  }
+  const span = state.draftRange;
+  state.draftRange = null;
+  if (isRange(span)) await addAnnotation(span);
+  repaintHighlights();
+}
+
 /* --------------------------------------------------------------- wiring */
 
 function toggleChrome() {
@@ -1056,12 +1376,43 @@ function toggleChrome() {
 }
 
 let pointerStart = null;
+let pencil = null;
+let lastTap = { at: 0, x: 0, y: 0, offset: -1 };
+let hoverToken = null;
+let hoverTimer = 0;
 
 els.viewport.addEventListener('pointerdown', function (event) {
+  if (event.pointerType === 'pen') {
+    startPencil(event);
+    return;
+  }
   pointerStart = { x: event.clientX, y: event.clientY };
 });
 
+els.viewport.addEventListener('pointermove', function (event) {
+  if (event.pointerType === 'pen') {
+    if (pencil) movePencil(event);
+    else onHoverMove(event.clientX, event.clientY);
+    return;
+  }
+  if (event.pointerType === 'mouse') onHoverMove(event.clientX, event.clientY);
+});
+
+els.viewport.addEventListener('pointercancel', function () {
+  pencil = null;
+  pointerStart = null;
+  state.draftRange = null;
+  repaintHighlights();
+  hideHover();
+});
+
+els.viewport.addEventListener('pointerleave', hideHover);
+
 els.viewport.addEventListener('pointerup', function (event) {
+  if (event.pointerType === 'pen') {
+    endPencil().catch(function (error) { fail(error); });
+    return;
+  }
   if (!pointerStart) return;
   const dx = event.clientX - pointerStart.x;
   const dy = event.clientY - pointerStart.y;
@@ -1080,6 +1431,15 @@ els.viewport.addEventListener('pointerup', function (event) {
     // landed on nothing falls through to navigation or the chrome.
     const offset = textOffsetAt(event.clientX, event.clientY);
     if (offset >= 0) {
+      const now = Date.now();
+      const isDouble = now - lastTap.at < 320
+        && Math.abs(event.clientX - lastTap.x) < 28
+        && Math.abs(event.clientY - lastTap.y) < 28;
+      lastTap = { at: now, x: event.clientX, y: event.clientY, offset: offset };
+      if (isDouble) {
+        enterSelection(offset);
+        return;
+      }
       showLookupAt(offset).catch(function (error) { fail(error); });
       return;
     }
@@ -1094,6 +1454,24 @@ els.viewport.addEventListener('pointerup', function (event) {
     }
   }
 });
+
+els.selectHighlight.addEventListener('click', function () {
+  if (state.selection) addAnnotation(state.selection).catch(function (error) { fail(error); });
+  clearSelection();
+});
+
+els.selectCopy.addEventListener('click', function () {
+  copySelection();
+});
+
+els.selectDict.addEventListener('click', function () {
+  const span = state.selection;
+  if (!span) return;
+  clearSelection();
+  showLookupAt(span.start).catch(function (error) { fail(error); });
+});
+
+els.selectClear.addEventListener('click', clearSelection);
 
 els.viewport.addEventListener('scroll', function () {
   if (state.settings.mode === 'horizontal') {
@@ -1178,7 +1556,7 @@ applyLayout();
 updatePageInfo();
 
 const buildEl = document.getElementById('build');
-if (buildEl) buildEl.textContent = 'html r5 · ' + APP_VERSION;
+if (buildEl) buildEl.textContent = 'html r6 · ' + APP_VERSION;
 
 // If the previous run never reached "done", its last stage is still in storage.
 // Say so, instead of leaving the next run to reproduce the same freeze blind.

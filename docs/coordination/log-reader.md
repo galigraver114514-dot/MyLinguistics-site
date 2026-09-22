@@ -2,6 +2,69 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - the Pencil chain: hover, drag-highlight, sentence selection
+
+Status: `interface-dict.md` is still 1.4 - nothing shared moved. The reader is
+at `?v=6`, stamp `html r6 · js r6`.
+
+### Three new reader modules, all tested without a browser
+
+| File | What it is |
+| --- | --- |
+| `reader/js/selection.js` | offset to word / sentence / paragraph, and drag snapping |
+| `reader/js/highlight.js` | the CSS Custom Highlight API with the layout guard |
+| `reader/js/annotations.js` | the reader's own IndexedDB, one record per highlight |
+
+`highlight.js` exists because of the footgun the spike found: a highlight
+registered over a subtree with no layout boxes fails silently and permanently.
+Every range is measured for client rects first, and a highlight with no visible
+range is removed instead of registered, so the painter can never leave behind
+one it could not see. The registry and the constructor are injected rather than
+reached for, which is what makes it testable under jsdom, where neither exists.
+
+`annotations.js` uses its own database, `ml-reader`, deliberately not the
+dictionary's. An annotation is the one irreplaceable thing in the reader: it
+must not be dropped by a dictionary cleanup, and a dictionary bug must not be
+able to take annotations down with it. Writes are awaited but never fatal -
+app.js paints the highlight in memory first, so an unavailable store costs
+persistence and nothing else.
+
+### The gestures
+
+- Finger tap on text: lookup. The margins still turn pages and the centre still
+  toggles chrome, because the text-versus-margin geometry from last turn is
+  what keeps that true.
+- Finger double tap: selects the sentence, then the paragraph on a repeat. The
+  granularity cycles rather than switching, so a repeated tap always widens.
+  The action bar is 蛍光 / コピー / 辞書 / 解除.
+- Pencil tap: precise lookup, same sheet.
+- Pencil drag: a highlight, snapped outward to whole words so a hand-drawn line
+  looks deliberate, written to IndexedDB and repainted on the next visit.
+- Pencil hover: the reading appears once the tip has rested on one word for
+  120 ms. A dictionary hit per pointer-move would inflate banks for words the
+  reader only passed over, so the delay is the feature.
+
+### Paragraphs can only come from the DOM
+
+`baseText` joins paragraphs with no separator at all, so nothing in the text
+can identify one. `paragraphRangeAt` walks up to the block element under
+`#content` and maps its text nodes back through the model. The selection code
+takes that as a provider, which is why `selection.js` has no imports and no DOM
+of its own.
+
+### Deliberately not here
+
+Generated furigana, so Pencil hover shows a reading only for words the loaded
+dictionary knows. Notes - and with them the span-wrapping fallback that makes a
+note marker clickable, because a note with nothing to tap is not a feature.
+Pinch, two-finger tap, and long-press pinning.
+
+### Tests
+
+14 new unit tests across selection, highlight and annotations, plus a page test
+that presses every selection action with nothing selected. Full suite 274
+passing.
+
 ## 2026-09-22 - tap to look up reaches the reader
 
 Status: the reader looks a word up on tap and shows a Japanese-Japanese

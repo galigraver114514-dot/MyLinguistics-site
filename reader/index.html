@@ -34,7 +34,7 @@
   <span id="page-info">- / -</span>
   <button id="btn-next" type="button" aria-label="次のページ">&rsaquo;</button>
   <span class="spacer"></span>
-  <span id="build" title="読み込まれている版">html r5</span>
+  <span id="build" title="読み込まれている版">html r6</span>
   <button id="btn-smaller" type="button">A&minus;</button>
   <button id="btn-larger" type="button">A&plus;</button>
 </footer>
@@ -53,6 +53,19 @@
   <div id="dict-body"></div>
 </div>
 
+<div id="hover-bubble" hidden>
+  <strong id="hover-word"></strong>
+  <span id="hover-reading"></span>
+</div>
+
+<div id="select-bar" hidden>
+  <span id="select-info"></span>
+  <button id="select-highlight" type="button">蛍光</button>
+  <button id="select-copy" type="button">コピー</button>
+  <button id="select-dict" type="button">辞書</button>
+  <button id="select-clear" type="button">解除</button>
+</div>
+
 <div id="overlay" hidden>
   <div id="sheet" role="dialog" aria-modal="true">
     <div class="sheet-head">
@@ -66,6 +79,6 @@
 <input type="file" id="file-input" accept=".epub,application/epub+zip" hidden>
 <input type="file" id="dict-input" accept=".zip,application/zip,application/x-zip-compressed" hidden>
 
-<script type="module" src="js/app.js?v=5"></script>
+<script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>
