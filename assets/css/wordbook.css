@@ -308,10 +308,38 @@
  * 濃淡 = progress, 色相 = part of speech, 中性 = exit.
  * ========================================================================== */
 
+/* An app is one screen. The document height was 1470 on 海 because a column
+ * grows with its list; on the board every column is a card of a fixed height
+ * with the list scrolling inside it, which is also what an iPad app does. */
 .wb-app {
-  min-height: calc(100dvh - var(--shell-top, 0px) - var(--page-pad));
+  display: flex;
+  flex-direction: column;
+  height: calc(100dvh - var(--shell-top, 0px) - var(--page-pad));
+  min-height: 0;
   padding: 0 var(--page-pad) var(--page-pad);
 }
+/* The chain has to be definite all the way down or `height: 100%` on a view
+ * quietly resolves to auto and every column grows with its list. A notice above
+ * the app takes its own height, and the section gets the rest. */
+.wb-app > .wb-section { flex: 1 1 auto; min-height: 0; }
+
+/* The app is the page. Its views used to be `.panel`s carried over from the
+ * document styling, which wrapped the whole thing in a card with 24px of
+ * padding, a border and a shadow - so the rail started 25px inside the margin
+ * and the two columns the grid lays out looked like one box. The panels are
+ * still the right element for the reader's sheets; they are not a page frame
+ * for an app. */
+.wb-app .wb-view {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* Nothing belongs below an app that is exactly one screen tall, and a document
+ * footer is exactly that. The other pages keep theirs. */
+.wb-app ~ .site-footer { display: none; }
 
 /* The hue channel, in one place: anything carrying data-pos can ask for
  * var(--pos) afterwards instead of naming a colour of its own. */
@@ -336,12 +364,36 @@
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
   align-items: start;
+  height: 100%;
+  min-height: 0;
+  /* A definite row height is what lets a rail's `max-height: 100%` mean
+   * anything: against an auto row it is a cycle and resolves to none, which is
+   * why the first attempt still let 海 grow to 1448px. */
+  grid-template-rows: minmax(0, 1fr);
 }
+.wb-view:has(> .wb-actions-bar),
+.wb-view:has(> .wb-grades) { grid-template-rows: minmax(0, 1fr) auto; }
 .wb-view:has(> .wb-rail) { grid-template-columns: 320px minmax(0, 1fr); }
+/* 川 puts its rail after the working column, and then the *working column* is
+ * the wide one - the 320px rail is the rail wherever it sits. */
+.wb-view:has(> .wb-rail:not(:first-child)) { grid-template-columns: minmax(0, 1fr) 320px; }
 .wb-view:has(> .wb-rail-right) { grid-template-columns: 320px minmax(0, 1fr) 294px; }
+/* A rail is the height of the row it is in, not of the page: spanning a second
+ * row creates an implicit auto row and the column grows with its list again,
+ * which is how 海 reached 1448px twice. The action bar sits under the working
+ * column, so the rail stops level with it - which is what the board draws. */
 .wb-view > .wb-rail,
-.wb-view > .wb-rail-right { grid-row: 1 / span 2; align-self: stretch; }
-.wb-view:has(> .wb-rail) > .wb-col-main,
+.wb-view > .wb-rail-right { align-self: stretch; }
+/* Which side a rail is on is the markup's decision, not this file's: 壁, 池 and
+ * 海 put it first and it is the left column, 川 puts it after the main column
+ * and it is the right one. Reading the order keeps both honest, and pinning
+ * every column stops the auto-placer from dropping the main column under a
+ * rail that asked for two rows - which is what made the 海 page 1921px tall. */
+.wb-view > .wb-rail:first-child { grid-column: 1; }
+.wb-view > .wb-col-main { grid-column: 2; }
+.wb-view > .wb-col-main:first-child { grid-column: 1; }
+.wb-view > .wb-rail:not(:first-child) { grid-column: 2; }
+.wb-view > .wb-rail-right { grid-column: 3; }
 .wb-view:has(> .wb-rail) > .wb-actions-bar,
 .wb-view:has(> .wb-rail) > .wb-grades { grid-column: 2; }
 
@@ -354,7 +406,12 @@
   gap: var(--space-3);
   padding-top: var(--space-1);
 }
-.wb-actions-bar .btn:first-of-type { flex: 1 1 auto; }
+/* Both actions fill the row and share it, and they are rounded rectangles
+ * rather than the site's pills - that is what the board draws. */
+.wb-actions-bar .btn {
+  flex: 1 1 0;
+  border-radius: var(--radius);
+}
 
 /* ------------------------------------------------------------- the two rails */
 
@@ -364,6 +421,8 @@
   flex-direction: column;
   gap: var(--space-3);
   min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
   padding: var(--space-4);
   background: var(--surface);
   border-radius: var(--radius-lg);
@@ -372,7 +431,7 @@
 .wb-rail-right > .wb-card-block { display: flex; flex-direction: column; gap: var(--space-3); }
 .wb-rail-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .wb-rail-title { font-size: var(--text-headline); font-weight: 600; letter-spacing: -0.012em; margin: 0; }
-.wb-rail-list { display: flex; flex-direction: column; gap: var(--space-1); overflow: auto; }
+.wb-rail-list { display: flex; flex-direction: column; gap: var(--space-1); min-height: 0; overflow: auto; }
 
 .wb-rail-row {
   display: flex;
@@ -472,11 +531,14 @@
 .wb-bars, .wb-breakdown { display: flex; flex-direction: column; gap: var(--space-2); }
 .wb-bar-row {
   display: grid;
-  grid-template-columns: 4.5rem minmax(0, 1fr) 3rem;
+  /* `auto` for the label: ブリック待ち is the longest word in the app and a fixed
+   * 4.5rem track wrapped it onto two lines. */
+  grid-template-columns: auto minmax(0, 1fr) 2.5rem;
   align-items: center;
   gap: var(--space-2);
   font-size: var(--text-footnote);
 }
+.wb-bar-label { white-space: nowrap; }
 .wb-bar {
   height: 6px;
   width: var(--bar, 100%);
@@ -530,7 +592,16 @@
 
 .wb-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
 .wb-row + .wb-row { border-top: 0.5px solid var(--separator); }
-.wb-row-main { min-width: 0; }
+/* One line per word. The board fits 名 / 水 / 飲み水。液体。 / さっき across the
+ * rail, so the definition gives way rather than the row growing - a list that
+ * wraps to three lines per entry is not a list. */
+.wb-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 .wb-row-meta { margin-left: auto; color: var(--muted); font-size: var(--text-footnote); }
 .wb-card-row { display: flex; align-items: center; gap: var(--space-3); }
 

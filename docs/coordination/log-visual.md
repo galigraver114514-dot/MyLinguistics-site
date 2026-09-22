@@ -10,6 +10,66 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-23 - T4: I can look at it now, and it found six things I could not have found by reading
+
+The human asked whether there is a way for me to verify the rendering myself,
+because a lot differs from the boards. There is, and it needs nothing installed
+in this repository:
+
+    npm_config_cache=/tmp/npmcache npx --yes playwright@1.63.0 install chromium
+    PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers npx playwright ... # screenshots
+
+Both caches live in `/tmp`, so `package.json` is untouched. Firefox is on this
+machine but it is a snap and `snap-confine` cannot start here (`cap_dac_override`
+missing), and `~/.npm` is owned by another uid, hence the redirected cache. A
+script drives one browser at 1194×834 with `ml.uilang=ja` set before load, walks
+each route, screenshots it **and prints the measured rect of every element that
+matters** - so the comparison against a board is numbers first, image second.
+
+### The first number that mattered
+
+**The UI language follows the browser.** With no stored preference the app
+renders in `navigator.language`, so the same page is English on an English
+machine and Chinese on a Chinese one - while every board is Japanese. That is
+the single biggest reason the app does not look like the boards, and it is worth
+a decision: either the default becomes 日本語, or the boards are read as "the ja
+rendering". `assets/js/i18n.js` is shared, so this is a REQUEST, not an edit.
+
+### Five layout bugs, all invisible to reading
+
+| Measured | Cause | Fix |
+| --- | --- | --- |
+| rail at x=47, not 22 | the views still carried the legacy `.panel` - 24px padding, a border and a shadow wrapping both columns in one card | `.wb-app .wb-view` resets padding, border and shadow |
+| document 969px, not 834 | the document `.site-footer` (97px) sits below the app | `.wb-app ~ .site-footer { display: none }` |
+| 海: main column at y=1460, document 1921px | auto-placement: a rail asking for two rows pushed the main column into row 2 | every column is pinned from the markup's own order |
+| 川: the working column was the 320px one | the template assumed the rail is always first; 川 puts it after | two templates, chosen by which child comes first |
+| every document 1448px on 海 | `height: 100%` resolved to `auto` because `.wb-section` in the middle had no definite height | the app is a flex column and the section takes the remainder |
+
+The last one is the one worth remembering: **a percentage height is only as good
+as the chain above it**, and the symptom (one column growing with its list)
+looks nothing like the cause.
+
+### And two the screenshot showed
+
+- the word rows in 海's rail wrapped to three lines per entry; the board fits
+  name, word, definition and state on one line, so the definition now truncates.
+- the 内訳 labels wrapped too - `ブリック待ち` is the longest word in the app and
+  the label track was a fixed 4.5rem. It is `auto` now.
+
+### What this does not fix
+
+The measured geometry now matches the boards (one screen exactly, columns
+320 / 512 / 294 with rails bounded and scrolling inside). **The data-driven
+parts are still unverified**: the wall is empty because a fresh profile has no
+bricks, and the two pool sheets need ブリック待ち words before they will open at
+all - clicking ブリックを作る with nothing to pack silently does nothing. Driving
+the app far enough to have bricks, and then comparing the wall and the sheets
+against `DiHAx` / `HnsOq` / `gLDnX`, is the next round.
+
+Also still data, not style: the grey monograms in 海's list are `data-pos="mixed"`
+because the dictionary module is not connected in that profile, so no part of
+speech is known yet.
+
 ## 2026-09-23 - T3: the vocabulary app is styled, and the rail exists
 
 ### 語彙: the layout, the wall, and the two sheets
