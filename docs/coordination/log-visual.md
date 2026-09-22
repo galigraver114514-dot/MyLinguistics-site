@@ -10,6 +10,65 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-23 - T8: 川's card, the rod, and what an iPad needs
+
+Commit `ec3b175`, still grant 1, and no new screens: the human asked for the
+river to look like its board and for the app to stop feeling like a web page on
+an iPad.
+
+### What was wrong with 川
+
+**The card was invisible.** `.wb-river` has had a border and a background all
+along, and a `mask-image` on the same element - which faded the two of them out
+along with the words' edges. The mask is gone; the card clips.
+
+**The top was not always covered.** A column whose topmost word had fallen into
+view left a blank band above it, and the band stayed until the next recycle.
+That is the "the top refreshes slowly, there are gaps" the human described.
+`coverTop()` keeps a word above the top edge of every column; a recycled word
+fades in over 260ms; the gap between words is 8px with 24px type, because 18px
+between words of different lengths left holes.
+
+**一新** is new and is the only control that changes what is in the water.
+
+### The rod
+
+It snapped to the finger and vanished on the frame it hooked a word. It now
+enters from above the field, eases towards the point (frame-rate independent),
+hooks with a ring, and lifts out when the finger goes. The words and the rod run
+on one loop, so pausing the stream does not freeze the rod.
+
+### iPad
+
+`overflow: hidden` + `overscroll-behavior: none` + `touch-action: manipulation`
+on the app's body (scoped with `:has(.wb-app)`, so no other page changes),
+momentum and `contain` on every inner list, no tap highlight, no selection
+outside text fields, and the bottom safe-area inset belongs to the app.
+
+### Two performance bugs, both older than this round
+
+- **Every navigation rendered its view twice.** `go()` routed the view itself and
+  then let the `hashchange` it caused route it again: two IndexedDB passes and
+  two DOM rebuilds per tap. Setting the hash is now the whole of it, with a
+  direct `route()` only when the hash is already the target.
+- **`draw()` called `getComputedStyle` twice per frame** - 120 forced style
+  recalcs a second while 川 is open. The palette is cached and invalidated by a
+  `data-theme` observer; measured at 0 per second now. This is a desktop-invisible
+  cost and an iPad-visible one.
+
+Returning to 川 also reuses the river instead of refilling the field and
+refetching the pool.
+
+### New tool, and what it caught at once
+
+`node designs/verify/interact.mjs` drives the app the way a finger does: page
+locked, rod eases and lifts, a hook fills the bucket, 一新 changes the words,
+every column starts above the top edge, one render per switch, nothing thrown.
+14/14 as of now. It caught the view fade on its first run: a `transform` on the
+view - even one that ends at `none`, because a filling animation stays in effect
+- makes it a containing block, and the pool's two `position: fixed` sheets moved
+22px right and 74px down. The fade is opacity only.
+
 ## 2026-09-23 - T7: 辞書's other half, and five bugs the boards exposed
 
 Still grant 1. `71dcea5` and `638c2f6`. **16/16 routes clean, 376 tests.**

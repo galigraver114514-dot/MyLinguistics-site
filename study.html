@@ -142,12 +142,13 @@
           <canvas class="wb-river-canvas" id="wbRiverCanvas" data-i18n-aria="wb.river.aria" aria-label="The word river. Drag the rod to hook one word."></canvas>
           <div class="wb-river-fallback" id="wbRiverFallback"></div>
           <p class="wb-river-empty hidden" id="wbRiverEmpty" data-i18n="wb.river.empty">The river is empty.</p>
+          <p class="wb-river-caption" data-i18n="wb.river.note">Drag the rod; the first word it touches lands in the bucket.</p>
         </div>
       </div>
       <div class="wb-col-main">
         <div class="wb-review-top wb-bucket-actions">
           <span class="pill" id="wbRiverCount">0</span>
-          <span class="muted small wb-river-hint" data-i18n="wb.river.note">Drag the rod; the first word it touches lands in the bucket.</span>
+          <button class="btn btn-ghost btn-small" id="wbRiverRefresh" type="button" data-i18n="wb.river.reload">Refresh</button>
           <button class="btn btn-ghost btn-small" id="wbRiverSpeed" type="button" data-i18n="wb.river.speed">Speed</button>
           <button class="btn btn-ghost btn-small" id="wbRiverPause" type="button" data-i18n="wb.river.pause">Pause</button>
           <button class="btn btn-primary btn-small" id="wbRiverToPool" type="button" data-i18n="wb.bucket.toPool">To the pool</button>

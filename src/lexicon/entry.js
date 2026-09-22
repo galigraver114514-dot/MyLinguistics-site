@@ -904,12 +904,31 @@ function updateRiverCount() {
 }
 
 async function startRiver() {
-  stopRiver();
-  var token = {};
-  RIVER.token = token;
   var canvas = el('wbRiverCanvas');
   if (!canvas) return;
 
+  /* Coming back to 川 keeps the river that is already there. It used to stop,
+   * release and rebuild the whole view - refetching the pool and refilling the
+   * field - every single time the tab was pressed, which is most of what made
+   * switching feel slow and what emptied the water for a moment on arrival. */
+  if (RIVER.view) {
+    RIVER.token = null;
+    RIVER.paused = false;
+    if (el('wbRiverFallback') && !RIVER.view.hasCanvas) { /* no 2D context: refill below */ }
+    RIVER.view.resize();
+    RIVER.view.start();
+    var pauseBtn = el('wbRiverPause');
+    if (pauseBtn) pauseBtn.textContent = tText('wb.river.pause');
+    RIVER.lastSpeed = 1;
+    applyRiverSpeed();
+    updateRiverCount();
+    renderBucket();
+    return;
+  }
+
+  stopRiver();
+  var token = {};
+  RIVER.token = token;
   var pool = await riverPool();
   if (RIVER.token !== token) return;
   var empty = el('wbRiverEmpty');
@@ -946,6 +965,8 @@ async function startRiver() {
       view: RIVER.view,
       pool: function () { return RIVER.pool; },
       bucket: function () { return RIVER.bucket.slice(); },
+      tip: function () { return RIVER.view ? RIVER.view.tip() : null; },
+      refill: function () { return RIVER.view ? RIVER.view.refill(RIVER.count) : 0; },
       catch: function (term, reading) { return bucketAdd(term, reading); },
       toPool: bucketToPool,
       empty: bucketReturnAll
@@ -953,13 +974,30 @@ async function startRiver() {
   }
 }
 
+/* Leaving 川 stops the clock and nothing else: the field, the words and the
+ * column widths stay, so returning is a resize and a start rather than a
+ * rebuild. Nothing else on the page uses the canvas. */
 function stopRiver() {
   RIVER.token = null;
   RIVER.pending = null;
-  if (RIVER.view) {
-    RIVER.view.stop();
-    RIVER.view.release();
-    RIVER.view = null;
+  if (RIVER.view) RIVER.view.stop();
+}
+
+/* 一新 - the words change. 流速 only changes how fast the same words fall; this
+ * is the one control that replaces what is in the water, and it re-reads the
+ * lexicon first so the word caught a minute ago is not still in the stream. */
+async function reloadRiver() {
+  if (!RIVER.view) return;
+  var note = el('wbRiverCatch');
+  RIVER.loading = true;
+  try { RIVER.pool = await riverPool(); } catch (err) { /* keep the words we have */ }
+  RIVER.loading = false;
+  RIVER.cursor = 0;
+  RIVER.view.refill(RIVER.count);
+  updateRiverCount();
+  if (note) {
+    note.textContent = tText('wb.river.reloaded');
+    show(note, true);
   }
 }
 
@@ -1179,8 +1217,15 @@ function phaseKey(brick) {
  * and a pasted link land in the same place. route() is idempotent, so the
  * hashchange that follows a real assignment does not double anything. */
 function go(hash) {
-  try { window.location.hash = hash; } catch (err) { /* a sandbox without one */ }
-  route();
+  var next = String(hash).replace(/^#/, '');
+  var here = String(window.location.hash || '').replace(/^#/, '');
+  try {
+    if (here === next) { route(); return; }
+    /* Setting the hash is the whole of it: the hashchange listener routes, and
+     * routing here as well rendered every view twice - two IndexedDB passes and
+     * two DOM rebuilds per tap. */
+    window.location.hash = next;
+  } catch (err) { route(); }
 }
 
 /* 壁 - the wall. One row per brick and ten readable cells per row: a colour
@@ -2325,13 +2370,20 @@ function bind() {
       grade(Number(event.key));
     }
   });
-  el('wbSearch').addEventListener('input', function (event) {
-    state.browseFilter = event.target.value;
-    renderBrowse();
-  });
-  el('wbDictSearch').addEventListener('input', function (event) {
-    renderDict(event.target.value);
-  });
+  /* Typing re-renders a list per keystroke; a frame of patience collapses a
+   * burst of them into one, which matters as soon as the lexicon is a real one
+   * and not eighteen words. */
+  function debounce(fn) {
+    var timer = null;
+    return function (value) {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () { timer = null; fn(value); }, 120);
+    };
+  }
+  var browseSoon = debounce(function (value) { state.browseFilter = value; renderBrowse(); });
+  el('wbSearch').addEventListener('input', function (event) { browseSoon(event.target.value); });
+  var dictSoon = debounce(function (value) { renderDict(value); });
+  el('wbDictSearch').addEventListener('input', function (event) { dictSoon(event.target.value); });
   el('wbDictLanding').addEventListener('click', function (event) {
     var target = event.target;
     if (!target || !target.closest) return;
@@ -2422,6 +2474,7 @@ function bind() {
   el('wbReset').addEventListener('click', resetAll);
   el('wbRiverPause').addEventListener('click', toggleRiver);
   el('wbRiverSpeed').addEventListener('click', cycleRiverSpeed);
+  el('wbRiverRefresh').addEventListener('click', reloadRiver);
   el('wbRiverToPool').addEventListener('click', bucketToPool);
   el('wbRiverCancel').addEventListener('click', bucketReturnAll);
   el('wbBucketSurface').addEventListener('click', function (event) {

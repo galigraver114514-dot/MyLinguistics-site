@@ -10,8 +10,15 @@
  */
 
 export const DEFAULT_COLUMNS = 6;
-export const DEFAULT_GAP = 18;
-export const DEFAULT_FONT = 22;
+/* The board's river is a dense stream, not a ladder: words sit close enough
+ * that a column reads as one flow of text. 18px of gap between words of
+ * different lengths left holes the eye reads as the stream running out. */
+export const DEFAULT_GAP = 8;
+export const DEFAULT_FONT = 24;
+/* How long a word takes to arrive after it is placed at the top. The view
+ * draws it fading in, which is what makes a recycle read as the river
+ * refreshing rather than as a word teleporting. */
+export const BORN_MS = 260;
 
 export function createField(options) {
   var opts = options || {};
@@ -24,6 +31,10 @@ export function createField(options) {
   var height = opts.height || 440;
   var items = [];
   var columns = [];
+  var clock = opts.clock || (typeof performance !== 'undefined' && performance.now
+    ? function () { return performance.now(); }
+    : function () { return Date.now(); });
+  function now() { return clock(); }
 
   /* How many columns: a fixed count when asked for, otherwise as many as fit
    * at the target width, so a wide iPad is densely packed and a phone is not. */
@@ -56,7 +67,7 @@ export function createField(options) {
     var word = nextWord();
     if (!word || !word.term) return null;
     var term = String(word.term);
-    return {
+    var item = {
       term: term,
       reading: word.reading || '',
       column: column.index,
@@ -65,8 +76,35 @@ export function createField(options) {
       width: column.cell,
       height: heightOf(term),
       speed: column.speed,
-      caught: false
+      caught: false,
+      born: now()
     };
+    items.push(item);
+    return item;
+  }
+
+  /* Placing a word *above* the column: the same as place(), but the height is
+   * known before the position is, because the position depends on it. */
+  function prepend(column) {
+    var word = nextWord();
+    if (!word || !word.term) return null;
+    var term = String(word.term);
+    var height = heightOf(term);
+    var top = columnTop(column.index, null);
+    var item = {
+      term: term,
+      reading: word.reading || '',
+      column: column.index,
+      x: column.x,
+      y: (top === Infinity ? 0 : top) - height - gap,
+      width: column.cell,
+      height: height,
+      speed: column.speed,
+      caught: false,
+      born: now()
+    };
+    items.push(item);
+    return item;
   }
 
   function columnTop(columnIndex, except) {
@@ -92,11 +130,17 @@ export function createField(options) {
     item.caught = false;
   }
 
+  /* Returns whether anything actually moved. A resize that changes nothing
+   * keeps the words: the view is reused whenever 川 is reopened. */
   function resize(w, h) {
-    width = Math.max(1, w || width);
-    height = Math.max(1, h || height);
+    var nextW = Math.max(1, w || width);
+    var nextH = Math.max(1, h || height);
+    if (nextW === width && nextH === height && items.length) return false;
+    width = nextW;
+    height = nextH;
     buildColumns();
     items = [];
+    return true;
   }
 
   function fill(count) {
@@ -108,9 +152,24 @@ export function createField(options) {
       for (var k = 0; k < wanted; k += 1) {
         var item = place(columns[c], y);
         if (!item) break;
-        items.push(item);
         y += item.height + gap;
         if (y > height) break;
+      }
+    }
+    coverTop();
+    return items.length;
+  }
+
+  /* Every column keeps a word at or above the top edge. A column whose topmost
+   * word has fallen into view leaves a blank band above it, and a blank band at
+   * the top of the river is the one thing that reads as the stream having run
+   * out - which is what "the top refreshes slowly" looks like. */
+  function coverTop() {
+    for (var c = 0; c < columns.length; c += 1) {
+      for (var guard = 0; guard < 10; guard += 1) {
+        var top = columnTop(columns[c].index, null);
+        if (top !== Infinity && top <= -lineHeight) break;
+        if (!prepend(columns[c])) break;
       }
     }
     return items.length;
@@ -156,6 +215,8 @@ export function createField(options) {
   return {
     resize: resize,
     fill: fill,
+    coverTop: coverTop,
+    bornMs: BORN_MS,
     step: step,
     items: function () { return items; },
     columns: function () { return columns.slice(); },

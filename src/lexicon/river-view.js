@@ -39,8 +39,17 @@ export function createRiverView(canvas, options) {
   var running = false;
   var frameId = null;
   var last = 0;
+  /* The rod is drawn from an animated position, not from the pointer's: a rod
+   * that snaps to the finger reads as a cursor, and the whole gesture is meant
+   * to be a rod going into water. `rodTarget` is where the finger is, `rod` is
+   * where the rod is, and the gap between them is eased away every frame. */
   var rod = null;
+  var rodTarget = null;
+  var rodUp = null;
+  var hook = 0;
   var ripple = null;
+  var ROD_EASE = 0.28;
+  var ROD_UP_MS = 220;
 
   var field = createField({
     columns: opts.columns,
@@ -54,7 +63,14 @@ export function createRiverView(canvas, options) {
     height: height
   });
 
+  /* The two colours the canvas paints with, read once and kept. This used to
+   * call getComputedStyle on every frame - two forced style recalcs sixty times
+   * a second, which is the kind of thing an iPad feels and a desktop does not.
+   * The theme is the only thing that changes them, so the theme is what this
+   * watches. */
+  var colors = null;
   function palette() {
+    if (colors) return colors;
     var text = '#000000';
     var tint = '#007aff';
     try {
@@ -62,7 +78,11 @@ export function createRiverView(canvas, options) {
       text = (styles.getPropertyValue('--text') || text).trim() || text;
       tint = (styles.getPropertyValue('--tint') || tint).trim() || tint;
     } catch (err) { /* keep the defaults */ }
-    return { text: text, tint: tint };
+    colors = { text: text, tint: tint };
+    return colors;
+  }
+  if (typeof MutationObserver === 'function' && typeof document !== 'undefined' && document.documentElement) {
+    new MutationObserver(function () { colors = null; }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   }
 
   function syncFallback() {
@@ -99,18 +119,47 @@ export function createRiverView(canvas, options) {
     ctx.font = '600 ' + fontSize + 'px ' + FONT_STACK;
 
     var items = field.items();
+    var nowMs = clock();
+    var bornMs = field.bornMs || 260;
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i];
+      /* A word that has just been placed at the top fades in: the river is
+       * endless, so a word appearing from nothing is the one thing that gives
+       * away that it is a loop. */
+      var age = item.born ? (nowMs - item.born) / bornMs : 1;
+      var appear = age >= 1 ? 1 : Math.max(0, age);
       ctx.fillStyle = item.caught ? colors.tint : colors.text;
-      ctx.globalAlpha = item.caught ? 1 : 0.82;
+      ctx.globalAlpha = (item.caught ? 1 : 0.82) * appear;
       var cx = item.x + item.width / 2;
+      var cy = item.y;
       for (var c = 0; c < item.term.length; c += 1) {
-        ctx.fillText(item.term.charAt(c), cx, item.y + c * lineHeight + lineHeight / 2);
+        var ch = item.term.charAt(c);
+        if (appear < 1) {
+          ctx.save();
+          ctx.translate(cx, cy + c * lineHeight + lineHeight / 2);
+          ctx.scale(1, 0.86 + 0.14 * appear);
+          ctx.fillText(ch, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.fillText(ch, cx, cy + c * lineHeight + lineHeight / 2);
+        }
       }
     }
     ctx.globalAlpha = 1;
 
     var time = clock();
+    if (hook > time) {
+      var k = 1 - (hook - time) / 180;
+      ctx.save();
+      ctx.strokeStyle = colors.tint;
+      ctx.globalAlpha = Math.max(0, 0.9 - k);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      var tipAt = tip();
+      ctx.arc(tipAt.x, tipAt.y, 5 + k * 12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
     if (ripple && ripple.until > time) {
       var progress = 1 - (ripple.until - time) / RIPPLE_MS;
       ctx.save();
@@ -123,57 +172,100 @@ export function createRiverView(canvas, options) {
       ctx.restore();
     }
 
-    if (rod) {
+    var shown = rod || rodUp;
+    if (shown) {
       ctx.save();
       ctx.strokeStyle = colors.tint;
       ctx.globalAlpha = 0.75;
       ctx.lineWidth = 2;
+      /* The line bends as it comes down: a straight stick reads as a cursor. */
       ctx.beginPath();
-      ctx.moveTo(rod.x, 0);
-      ctx.lineTo(rod.x, rod.y);
+      ctx.moveTo(shown.x, 0);
+      ctx.quadraticCurveTo(shown.x + 14, shown.y * 0.55, shown.x, shown.y);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(rod.x, rod.y, 5, 0, Math.PI * 2);
+      ctx.arc(shown.x, shown.y, 5, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
   }
 
+  function tip() {
+    var shown = rod || rodUp;
+    if (shown) return { x: shown.x, y: shown.y };
+    return rodTarget ? { x: rodTarget.x, y: rodTarget.y } : { x: 0, y: 0 };
+  }
+
+  /* The rod lags the finger by design (see ROD_EASE), and comes back out of the
+   * water when the gesture ends instead of disappearing. */
+  function easeRod(dt) {
+    if (rod && rodTarget) {
+      var k = 1 - Math.pow(1 - ROD_EASE, Math.max(dt, 0.001) * 60);
+      rod.x += (rodTarget.x - rod.x) * k;
+      rod.y += (rodTarget.y - rod.y) * k;
+    }
+    if (rodUp) {
+      var left = rodUp.until - clock();
+      if (left <= 0) {
+        rodUp = null;
+      } else {
+        var t = 1 - left / ROD_UP_MS;
+        var eased = 1 - Math.pow(1 - t, 2);
+        rodUp.y = rodUp.fromY + (-24 - rodUp.fromY) * eased;
+        rodUp.x = rodUp.fromX;
+      }
+    }
+  }
+
+  function animating() { return running || !!rod || !!rodUp; }
+
   function resize() {
     var rect = canvas && typeof canvas.getBoundingClientRect === 'function' ? canvas.getBoundingClientRect() : null;
-    width = Math.max(280, Math.round((rect && rect.width) || (canvas && canvas.clientWidth) || opts.width || 720));
-    height = Math.max(220, Math.round((rect && rect.height) || (canvas && canvas.clientHeight) || opts.height || 440));
-    if (canvas) {
+    var nextW = Math.max(280, Math.round((rect && rect.width) || (canvas && canvas.clientWidth) || opts.width || 720));
+    var nextH = Math.max(220, Math.round((rect && rect.height) || (canvas && canvas.clientHeight) || opts.height || 440));
+    width = nextW;
+    height = nextH;
+    if (canvas && (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr))) {
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
     }
     if (ctx && typeof ctx.setTransform === 'function') ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    field.resize(width, height);
-    field.fill(opts.count || 60);
+    /* Same box and words still in the water: nothing to do but paint. The view
+     * is reused when 川 is reopened, and refilling on every arrival is what
+     * emptied the river for a moment and refetched the pool for nothing. */
+    if (field.resize(width, height) || !field.items().length) field.fill(opts.count || 60);
     draw();
   }
 
+  /* One loop for the words and the rod. The words only move while the river is
+   * running, but the rod has to keep animating when it is not - pausing the
+   * stream should not freeze the thing the finger is holding. */
   function advance(ts) {
-    if (!running) return;
     var dt = last ? Math.min(0.05, (ts - last) / 1000) : 0;
     last = ts;
-    field.step(dt);
+    if (running) field.step(dt);
+    easeRod(dt);
     draw();
-    frameId = raf ? raf(advance) : null;
+    frameId = animating() && raf ? raf(advance) : null;
+  }
+
+  function kick() {
+    if (!raf || frameId != null) return;
+    last = 0;
+    frameId = raf(advance);
   }
 
   function start() {
     if (running) return;
     running = true;
-    last = 0;
-    if (raf) frameId = raf(advance);
-    else draw();
+    kick();
+    if (!raf) draw();
   }
 
   function stop() {
     running = false;
-    if (frameId != null && caf) caf(frameId);
-    frameId = null;
+    if (!animating() && frameId != null && caf) caf(frameId);
+    if (!animating()) frameId = null;
   }
 
   function pointOf(event) {
@@ -187,21 +279,25 @@ export function createRiverView(canvas, options) {
    * the same word is reachable again next cast. */
   function castAt(point) {
     if (!point) return false;
-    rod = { x: point.x, y: point.y };
+    rodTarget = { x: point.x, y: point.y };
     var caught = field.catchAt(point.x, point.y);
-    if (!caught) {
-      draw();
-      return false;
-    }
-    rod = null;
+    if (!caught) return false;
+    hook = clock() + 180;
     ripple = { x: point.x, y: point.y, until: clock() + RIPPLE_MS };
-    draw();
     if (typeof opts.onCatch === 'function') opts.onCatch(caught);
     return true;
   }
 
+  /* The rod goes in from above the field rather than appearing under the
+   * finger: a 24px drop is enough for the gesture to read as lowering a rod
+   * into water, and it is the first thing the hand sees after a tap. */
   function onDown(event) {
-    castAt(pointOf(event));
+    var point = pointOf(event);
+    rod = { x: point.x, y: -24 };
+    rodTarget = { x: point.x, y: point.y };
+    rodUp = null;
+    castAt(point);
+    kick();
     if (canvas.setPointerCapture && event.pointerId != null) {
       try { canvas.setPointerCapture(event.pointerId); } catch (err) { /* ignore */ }
     }
@@ -214,8 +310,16 @@ export function createRiverView(canvas, options) {
 
   function onUp() {
     if (!rod) return;
+    lift();
+  }
+
+  function lift() {
+    if (rod) rodUp = { x: rod.x, y: rod.y, fromX: rod.x, fromY: rod.y, until: clock() + ROD_UP_MS };
     rod = null;
-    draw();
+    rodTarget = null;
+    field.releaseCaught();
+    kick();
+    if (!raf) draw();
   }
 
   if (canvas && typeof canvas.addEventListener === 'function') {
@@ -232,11 +336,26 @@ export function createRiverView(canvas, options) {
     stop: stop,
     draw: draw,
     release: function () {
+      /* The catch is done: lift the rod out, and let the ripple finish. The
+       * rod used to vanish on the same frame the word was hooked, which is the
+       * one moment the gesture most wants to be animated. */
+      rodUp = rod
+        ? { x: rod.x, y: rod.y, fromX: rod.x, fromY: rod.y, until: clock() + ROD_UP_MS }
+        : rodUp;
       rod = null;
-      ripple = null;
+      rodTarget = null;
       field.releaseCaught();
-      draw();
+      kick();
+      if (!raf) draw();
     },
+    refill: function (count) {
+      var wanted = count || opts.count || field.items().length || 60;
+      field.fill(wanted);
+      field.coverTop();
+      draw();
+      return field.items().length;
+    },
+    tip: tip,
     hasCanvas: !!ctx
   };
 }

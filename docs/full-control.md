@@ -112,6 +112,46 @@ the shot; it is hidden again immediately before the screenshot.
 
 Routes are 16 now (`sea-dict-word`, `sea-dict-landing`).
 
+### Continued again: 川's look, and how it behaves on an iPad
+
+Commit `ec3b175`, still inside grant 1. No new screens - the human asked for the
+river to match its board and for the app to stop feeling like a web page on an
+iPad.
+
+**The river's card was invisible.** A `mask-image` on `.wb-river` faded the
+element's own border and background along with the words' edges. The mask is
+gone, the card clips, the water is the tint at 6%, and the words are denser
+(8px of gap, 24px type) because 18px between words of different lengths left
+holes the eye read as the stream running out. `coverTop()` keeps a word above
+the top edge of every column - an uncovered column top is what "the top
+refreshes slowly" looks like - and a recycled word fades in over 260ms.
+
+**一新** is the button that changes what is in the water; 流速 only changes how
+fast the same words fall.
+
+**The rod is animated**: it enters from above the field, eases towards the point,
+hooks with a ring, and lifts when the finger goes, on the same loop as the words
+so a paused stream does not freeze it.
+
+**iOS**: the page no longer scrolls, rubber-bands or double-tap-zooms, the inner
+lists get momentum and `contain`, tap highlights and text selection are off, and
+the bottom inset is the app's. The page had been competing with the river for the
+drag.
+
+**Two performance bugs, both older than this round.** `go()` routed the view and
+then let the `hashchange` it caused route it again - every navigation rendered
+its view twice. And `draw()` called `getComputedStyle` twice per frame: 120
+forced style recalcs a second, invisible on a desktop and not on an iPad. The
+palette is cached now (measured: 0 per second) and a return to 川 reuses the
+river instead of refilling it and refetching the pool.
+
+**`designs/verify/interact.mjs` is new** and is where the iPad behaviour is
+checked: page locked, rod eases and lifts, a hook fills the bucket, 一新 changes
+the words, every column starts above the top edge, one render per switch, nothing
+thrown. It earned its place immediately - a `transform` on the view (even one
+ending at `none`) makes it a containing block, and the pool's two fixed sheets
+moved 22px right and 74px down. The view fade is opacity only now.
+
 ### Deliberately left alone
 
 - **The bucket's chips are buttons, not drag targets.** The board's lede says
@@ -156,5 +196,7 @@ there (`catch:auto:30` → `toPool` → `click:#wbPoolBuild` → …) because �
 sheets and the drill only exist once something has been caught and packed.
 
 Entry point: commits `795b88b` (the bucket, the geometry, 海), `9ad10e9`
-(復習 and ブリック総覧), `71dcea5` (the 辞書 column and three bugs) and `638c2f6`
-(the 辞書 landing and two more). Tests: 376/376. Board rules: 0. Routes: 16/16.
+(復習 and ブリック総覧), `71dcea5` (the 辞書 column and three bugs), `638c2f6`
+(the 辞書 landing and two more) and `ec3b175` (川's card, the rod, iOS, and two
+performance bugs). Tests: 376/376. Board rules: 0. Routes: 16/16.
+Interaction checks: `node designs/verify/interact.mjs`, 12/12.

@@ -101,15 +101,17 @@
 }
 
 /* The word river: a field of words flowing in lanes, and the net. */
+/* The river is a card with water in it. It had a border and a background all
+ * along - and a `mask-image` on the same element, which erased them both along
+ * with the words' edges. The mask is gone: the card clips, the way the board
+ * draws it, and the water is the tint at 6%. */
 .wb-river {
   position: relative;
   height: 440px;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--tint) 6%, var(--surface-2));
 }
 
 .wb-river-canvas {
@@ -1013,3 +1015,107 @@
 .wb-today-head strong { font-size: var(--text-headline); }
 .wb-today-head .btn { margin-left: auto; border-radius: var(--radius); }
 .wb-today p { margin: 0; }
+
+/* ==========================================================================
+ * iPad / iOS interaction
+ *
+ * The app is exactly one screen, so the page itself must not scroll, pan or
+ * rubber-band: a global scrollbar on a surface that has nothing to scroll is
+ * the first thing that makes a web app feel like a web page, and the drag in
+ * 川 was fighting the page for the gesture. Every list inside keeps its own
+ * momentum scrolling, and the page keeps its own gestures off the canvas.
+ * ========================================================================== */
+
+body:has(.wb-app) {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;          /* no 300ms tap delay, no double-tap zoom */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+/* Text fields are the exception: a search box you cannot select in is broken. */
+body:has(.wb-app) input,
+body:has(.wb-app) textarea { -webkit-user-select: text; user-select: text; }
+
+/* One screen, one box: the app's height already subtracts the shell, so the
+ * bottom inset belongs to the app and not to the browser chrome. */
+.wb-app { padding-bottom: max(var(--page-pad), var(--safe-bottom)); }
+
+/* Every scrollable inside the app scrolls on its own, with momentum, and stops
+ * carrying the page with it when it reaches the end. */
+body:has(.wb-app) .wb-rail-list,
+body:has(.wb-app) .wb-inbox-list,
+body:has(.wb-app) .wb-bucket-surface,
+body:has(.wb-app) .wb-dict-blocks,
+body:has(.wb-app) .wb-sheet,
+body:has(.wb-app) .wb-col-main,
+body:has(.wb-app) .wb-pool-list {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+body:has(.wb-app) .wb-rail-list,
+body:has(.wb-app) .wb-inbox-list,
+body:has(.wb-app) .wb-bucket-surface,
+body:has(.wb-app) .wb-dict-blocks,
+body:has(.wb-app) .wb-pool-list,
+body:has(.wb-app) .wb-sheet { touch-action: pan-y; }
+
+/* The river takes the whole gesture: no page pan, no selection, no callout. */
+.wb-river-canvas {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  -webkit-touch-callout: none;
+}
+/* A rail row is a button on a touch screen before it is a hover target. */
+.wb-rail-row,
+.wb-row,
+.wb-pick-row { -webkit-tap-highlight-color: transparent; }
+@media (hover: none) {
+  .wb-rail-row:hover,
+  .wb-row:hover,
+  .wb-pick-row:hover { background: transparent; }
+  .wb-rail-row:active,
+  .wb-pick-row:active { background: var(--surface-2); }
+  .wb-row:active { background: var(--surface-2); }
+}
+
+/* The rod's instruction sits on the water rather than in the action row: as a
+ * row item it pushed 池へ and 取消 onto a second line and the bucket card down
+ * with them, and the board's action row is one line of four buttons. */
+.wb-river-caption {
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  max-width: calc(100% - var(--space-4));
+  margin: 0;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  /* It sits on the water, so it needs its own ground to be readable. */
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  color: var(--muted);
+  font-size: var(--text-caption);
+  pointer-events: none;
+}
+.wb-bucket-actions { flex-wrap: nowrap; }
+.wb-bucket-actions .btn { flex: 0 0 auto; }
+
+/* A view arrives rather than appearing. The switch is one frame of work, but a
+ * hard cut between two full screens reads as a stall even when it is instant.
+ *
+ * Opacity only, deliberately: a `transform` on this element - even one that
+ * ends at `none`, because a filling animation stays in effect - makes the view
+ * a containing block, and the pool's two sheets and their backdrop are
+ * `position: fixed` inside it. They moved 22px right and 74px down the moment
+ * this was a fade plus a rise, which the measured rect caught. */
+.wb-view:not(.hidden) { animation: wb-view-in var(--motion-base) var(--ease-out); }
+@keyframes wb-view-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-view:not(.hidden) { animation: none; }
+}
