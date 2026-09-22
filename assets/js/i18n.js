@@ -403,7 +403,7 @@ window.ML_I18N = (function () {
       'pool.filter.candidates': "候选",
       'pool.log.title': "池的流转",
       'pool.log.today': "今天",
-      'pool.log.fromRiver': "从樋来",
+      'pool.log.fromRiver': "从川来",
       'pool.log.toBrick': "进砖了",
       'pool.log.stayed': "留在池里",
       'pool.build.title': "组一块砖",
@@ -713,7 +713,7 @@ window.ML_I18N = (function () {
       'pool.filter.candidates': "候補",
       'pool.log.title': "池の流れ",
       'pool.log.today': "今日",
-      'pool.log.fromRiver': "樋から",
+      'pool.log.fromRiver': "川から",
       'pool.log.toBrick': "ブリックへ",
       'pool.log.stayed': "池に残った",
       'pool.build.title': "ブリックを作る",
@@ -982,6 +982,14 @@ window.ML_I18N = (function () {
     normalize: normalize,
     supported: supported,
     detect: detect,
-    translate: translate
+    translate: translate,
+    /* One locale's key set, sorted. For the test that keeps the three tables in
+     * step: a key added to one and forgotten in another falls back to English
+     * without a sound, and a wrong-language string on a Japanese surface is a
+     * bug the UI cannot show you. */
+    keys: function (code) {
+      var table = STRINGS[normalize(code)] || STRINGS[FALLBACK];
+      return Object.keys(table).sort();
+    }
   };
 })();

@@ -78,8 +78,9 @@ its place:
   the order they were reviewed. Every brick shows its ten words, and the drill
   (`#wall/review`) schedules them with FSRS-6, recognition before production. A
   **Look only** toggle shows every answer and advances without grading.
-- **川** (`study.html#river`) is a vertical field of words in tategaki. Drag the
-  rod and the first word the hook touches goes into the pool.
+- **川** (`study.html#river`) is a vertical field of words in tategaki. Press and
+  hold a word, then drag it into the bucket; 池へ moves the bucket's words into
+  the pool. A tap takes nothing.
 - **池** (`study.html#pool`) is the packing workshop: the words waiting for a
   brick, and the two sheets that pack them - `選ぶ` (自動で組む takes the ten the
   packer would, 手で選ぶ starts empty) then `設定` (name, part of speech, a fixed

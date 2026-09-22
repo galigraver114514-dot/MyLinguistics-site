@@ -6,7 +6,12 @@ browser fetches one pack, once, and nothing here is fetched by the deploy.
 
 | File | Pack | Entries | Lookup keys | Size (gz) |
 | --- | --- | --- | --- | --- |
-| `jmdict-eng-common.json.gz` | `common` | 22,640 | 54,154 | 1.4 MB |
+| `jmdict-eng-common.json.gz` | `common` | 22,639 | 50,693 | 1.4 MB |
+
+Counts are measured from the shipped file, not carried over: **Entries** is
+`data.words.length` after dropping words with no glossed sense, and **Lookup
+keys** is the number of distinct forms `src/dict/jmdict.js` indexes (headwords
+plus readings).
 
 Source: `scriptin/jmdict-simplified`, release `3.6.2+20260921173324`,
 asset `jmdict-eng-common-*.json.tgz`. The file is that release's JSON,
@@ -28,7 +33,7 @@ rendered wherever the data is shown.
 ## The packs that are not committed
 
 `full` (`jmdict-eng.json.gz`, 218,776 entries, 11.2 MB) and `names`
-(`jmnedit-all.json.gz`) are named in `PACK_FILES` but not committed. Eleven
+(`jmnedict-all.json.gz`) are named in `PACK_FILES` but not committed. Eleven
 megabytes of dictionary in the public git history is a cost paid again on every
 future release for a pack the reader does not load by default; build it the same
 way and drop it in `dict/` when it is wanted.

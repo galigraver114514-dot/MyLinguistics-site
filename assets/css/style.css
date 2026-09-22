@@ -45,45 +45,20 @@ main { display: block; }
 
 .section { padding: 54px 0; }
 
-.page-head { padding: 40px 0 8px; }
-.page-head p { color: var(--muted); max-width: 68ch; }
+/* ------------------------------------------------------------------ header
+ * What is left of the header layer: the mark inside the capsule's brand link.
+ * The sticky header, its nav, its toggle and the page head that went with them
+ * are gone from every page (shell.test.js asserts the old header stays gone),
+ * and the capsule in shell.css owns the bar now. */
 
-/* ------------------------------------------------------------------ header */
-
-.site-header {
-  position: sticky; top: 0; z-index: 30;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
 .header-inner { position: relative; display: flex; align-items: center; gap: 18px; height: 62px; }
 
-.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; }
-.brand:hover { text-decoration: none; }
 .brand-mark {
   display: grid; place-items: center;
   width: 32px; height: 32px; border-radius: 9px;
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   color: #fff; font-size: 0.78rem; letter-spacing: 0.04em;
 }
-.brand-name { font-size: 1.02rem; letter-spacing: -0.01em; }
-
-.site-nav { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-.site-nav a {
-  color: var(--muted); font-size: 0.93rem; font-weight: 500;
-  padding: 8px 12px; border-radius: 999px;
-}
-.site-nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
-.site-nav a.is-active { background: var(--accent-soft); color: var(--accent); }
-
-.nav-toggle, .theme-toggle {
-  font: inherit; font-size: 0.85rem; font-weight: 600;
-  color: var(--text); background: var(--surface-2);
-  border: 1px solid var(--border); border-radius: 999px;
-  padding: 7px 14px; cursor: pointer;
-}
-.nav-toggle { display: none; margin-left: auto; }
-.theme-toggle { min-width: 68px; }
-.nav-toggle:hover, .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
 .lang-switch { display: inline-flex; align-items: center; }
 .lang-switch select {
@@ -187,16 +162,6 @@ main { display: block; }
 /* -------------------------------------------------------------- responsive */
 
 @media (max-width: 820px) {
-  .nav-toggle { display: inline-flex; }
-  .site-nav {
-    display: none; position: absolute; top: 100%; left: 0; right: 0;
-    flex-direction: column; align-items: stretch; gap: 2px;
-    background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 12px 22px 18px; box-shadow: var(--shadow-md);
-  }
-  .site-nav.is-open { display: flex; }
-  .site-nav a { border-radius: var(--radius-sm); padding: 10px 12px; }
-  .theme-toggle { order: 3; }
   .lang-switch { order: 2; }
 }
 

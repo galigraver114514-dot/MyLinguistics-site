@@ -513,13 +513,21 @@
   font-size: var(--text-footnote);
 }
 .wb-bar-label { white-space: nowrap; }
-.wb-bar {
-  height: 6px;
-  width: var(--bar, 100%);
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--pos, var(--muted-2)) 40%, transparent);
-}
+/* .wb-bar itself is defined with its fill span further down, where the 海 block
+ * explains the magnitude channel; the rule that used to live here made the
+ * track carry the 40% wash and left the fill span with no rule of its own. */
 .wb-bar-value { text-align: right; color: var(--muted); }
+
+/* The reading line. It is drawn under the term on the drill card, beside it in
+ * the 単語 entry card, and inside every 辞書 entry block - and it had no rule of
+ * its own anywhere, so 学ぶ and まなぶ came out the same size. The board gives it
+ * a smaller step of its own under the term (Kr4lF); the chip the board wraps it
+ * in needs the part-of-speech icon set, which is D2 and still open. */
+.card-reading { color: var(--muted); font-size: var(--text-callout); }
+
+/* The one banner that is not a board state: when the engine cannot start, the
+ * page has to say so in the warning tone rather than in a neutral pill. */
+.pill-warn { background: var(--warn-soft); color: var(--warn); }
 
 /* --------------------------------------------------------------- list rows */
 

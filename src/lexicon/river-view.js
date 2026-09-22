@@ -318,7 +318,9 @@ export function createRiverView(canvas, options) {
       lift: 0,
       slot: item
     };
-    field.replaceAt(item);
+    /* In view: the replacement must be drawn immediately, not faded in from
+     * alpha 0, or the slot reads as a hole under the finger for 260ms. */
+    field.replaceAt(item, null, { fade: false });
     press = null;
     kick();
     return true;
@@ -329,8 +331,9 @@ export function createRiverView(canvas, options) {
     var taken = { term: held.term, reading: held.reading };
     if (!landedInBucket && held.slot) {
       /* Let go anywhere but the bucket and the word goes back where it came
-       * from - it is the same river, and nothing was decided. */
-      field.replaceAt(held.slot, { term: taken.term, reading: taken.reading });
+       * from - it is the same river, and nothing was decided. In view, so it
+       * cannot fade: the slot would look empty while it does. */
+      field.replaceAt(held.slot, { term: taken.term, reading: taken.reading }, { fade: false });
     }
     held = null;
     markDropZone(false);

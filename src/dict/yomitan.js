@@ -94,6 +94,20 @@ function mergeSenses(entries) {
     const existing = byEntry.get(key);
     if (existing) {
       existing.senses = existing.senses.concat(entry.senses);
+      // Rows sharing a sequence are one word written more than one way - 心 is
+      // both こころ and しん - so every spelling the dictionary lists is kept,
+      // in first-seen order and without repeats. Interface 1.1 says headwords
+      // and readings are all of them, not just the first row's.
+      for (let h = 0; h < entry.headwords.length; h++) {
+        if (existing.headwords.indexOf(entry.headwords[h]) === -1) {
+          existing.headwords.push(entry.headwords[h]);
+        }
+      }
+      for (let r = 0; r < entry.readings.length; r++) {
+        if (existing.readings.indexOf(entry.readings[r]) === -1) {
+          existing.readings.push(entry.readings[r]);
+        }
+      }
       continue;
     }
     byEntry.set(key, entry);
@@ -228,6 +242,10 @@ function makeSource(state) {
   const rowOf = state.index.rowOf;
   const language = state.language;
   const bankCache = new Map();
+  // Banks that could not be inflated or parsed on demand. They are reported
+  // through problems(); the query itself answers from the banks that are
+  // intact, because one corrupt bank is not a reason to lose the whole lookup.
+  const bankProblems = [];
 
   async function loadBank(bankIndex) {
     const cached = bankCache.get(bankIndex);
@@ -237,8 +255,22 @@ function makeSource(state) {
       return cached;
     }
     const name = state.bankNames[bankIndex];
-    const raw = await state.archive.readText(name);
-    const rows = raw ? JSON.parse(raw) : [];
+    let rows;
+    try {
+      const raw = await state.archive.readText(name);
+      rows = raw ? JSON.parse(raw) : [];
+    } catch (error) {
+      // buildIndex reports a bad bank the same way, so the two paths agree.
+      // An empty bank is cached, so a lookup that keeps landing in it records
+      // one failure rather than one per call.
+      rows = [];
+      bankProblems.push({
+        id: state.id,
+        stage: 'bank',
+        bank: name,
+        error: 'term bank ' + name + ' could not be read: ' + (error && error.message ? error.message : error)
+      });
+    }
     bankCache.set(bankIndex, rows);
     while (bankCache.size > (state.cachedBanks || DEFAULT_CACHED_BANKS)) {
       const oldest = bankCache.keys().next().value;
@@ -386,6 +418,11 @@ function makeSource(state) {
       return readStyles();
     },
 
+    /** Banks this source failed to read, in the order they failed. */
+    problems() {
+      return bankProblems.slice();
+    },
+
     clearCache() {
       bankCache.clear();
     },
@@ -396,6 +433,7 @@ function makeSource(state) {
         banks: state.bankNames.length,
         keys: keys.length,
         entries: state.info.entryCount,
+        bankFailures: bankProblems.length,
         cachedBanks: bankCache.size
       };
     }
@@ -469,6 +507,10 @@ export async function importYomitan(options) {
     format: index.format === undefined ? null : index.format,
     licence: typeof index.licence === 'string' ? index.licence : (typeof index.license === 'string' ? index.license : ''),
     attribution: typeof index.attribution === 'string' ? index.attribution : '',
+    // Rows, not merged entries: one word split across rows that share a
+    // sequence is counted once per row here, while lookup() folds those rows
+    // back into a single entry. This is the number result.entries reports and
+    // the number the "n words" badge shows, so it stays the row count.
     entryCount: built.entries,
     keyCount: built.keys.length,
     banks: counts,

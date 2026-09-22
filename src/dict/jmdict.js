@@ -105,13 +105,6 @@ function priorityScore(tags) {
   return score;
 }
 
-function collectTags(form) {
-  const out = [];
-  const tags = form && form.tags ? form.tags : [];
-  for (let i = 0; i < tags.length; i++) out.push(tags[i]);
-  return out;
-}
-
 /**
  * Turn one jmdict-simplified word into the shared Entry shape.
  *

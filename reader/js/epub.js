@@ -116,14 +116,19 @@ export async function openEpub(input, options = {}) {
   const opf = parseXml(opfSource, opfPath, domParser);
   const opfDir = dirname(opfPath);
 
+  // <metadata> is missing from some converted books that keep only
+  // package-level <meta> records. Resolve the lookup root once, to the package
+  // element in that case, so a book with no metadata still opens with empty
+  // fields instead of dereferencing null.
   const metadataNode = findFirst(opf, 'metadata');
+  const metadataRoot = metadataNode || opf;
   const metadata = {
-    title: textOf(findFirst(metadataNode || opf, 'title')),
-    author: textOf(findFirst(metadataNode || opf, 'creator')),
-    language: textOf(findFirst(metadataNode || opf, 'language')),
-    identifier: textOf(findFirst(metadataNode || opf, 'identifier')),
-    publisher: textOf(findFirst(metadataNode || opf, 'publisher')),
-    modified: textOf(findFirst(metadataNode || opf, 'meta') ? findFirst(metadataNode, 'meta') : null)
+    title: textOf(findFirst(metadataRoot, 'title')),
+    author: textOf(findFirst(metadataRoot, 'creator')),
+    language: textOf(findFirst(metadataRoot, 'language')),
+    identifier: textOf(findFirst(metadataRoot, 'identifier')),
+    publisher: textOf(findFirst(metadataRoot, 'publisher')),
+    modified: textOf(findFirst(metadataRoot, 'meta'))
   };
 
   const spineNode = findFirst(opf, 'spine');

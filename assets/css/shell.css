@@ -271,23 +271,10 @@ body.has-shell.has-capsule {
 }
 .capsule .icon-btn:hover { background: var(--fill); }
 
-/* ---------------------------------------------------------------- tab bar
- * Retiring: the pages still carry this markup for one release, and it goes
- * when they stop. Nothing new should be added here. */
-
-.tabbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 30;
-  display: flex;
-  padding-bottom: var(--safe-bottom);
-  background: var(--material);
-  -webkit-backdrop-filter: var(--blur);
-  backdrop-filter: var(--blur);
-  border-top: 0.5px solid var(--separator);
-}
+/* ------------------------------------------------------- capsule / tab items
+ * Retired: the fixed bottom bar itself. Every page stopped carrying
+ * .tabbar - shell.test.js asserts it - and the capsule owns the bar. The item
+ * rules stay: the capsule's links are still .tabbar-item markup. */
 
 .tabbar-item {
   flex: 1 1 0;
@@ -305,7 +292,6 @@ body.has-shell.has-capsule {
 }
 .tabbar-item:hover { text-decoration: none; color: var(--text); }
 .tabbar-item.is-active { color: var(--tint); }
-.tabbar-icon { width: 26px; height: 26px; display: block; }
 .tabbar-label { line-height: 1; }
 
 /* ------------------------------------------------------------------ sheet */

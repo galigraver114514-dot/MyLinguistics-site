@@ -392,7 +392,12 @@ async function refresh() {
   pool.forEach(function (item) { state.encounterByKey[item.wordKey] = item; });
   state.pool = pool;
   state.cardCount = cards.length;
-  state.stats = await state.lex.stats();
+  /* The pool is every encounter whose state is not 'new', which is exactly what
+   * the two counters in stats() are derived from, so the counts cost two store
+   * reads instead of six on every graded card. */
+  state.stats = await state.lex.stats(Date.now(), {
+    words: words, senses: senses, cards: cards, encounters: pool
+  });
   renderStats();
   renderSeaStats();
 }
@@ -621,8 +626,9 @@ async function markKnown(senseIdValue) {
  * gives them no screen and dropping the approval step is not this commit's
  * call (see the open question in log-wordbook.md). */
 async function renderPool() {
-  state.pool = await state.lex.listPool();
-  state.inbox = await state.lex.listInbox();
+  var tables = await state.lex.poolAndInbox();
+  state.pool = tables.pool;
+  state.inbox = tables.inbox;
   var waiting = state.pool.filter(function (item) { return item.state === 'carded'; });
   state.waiting = waiting;
 
@@ -710,7 +716,9 @@ function applyPoolFilter() {
 
 async function approveCandidate(wordKey) {
   var created = await state.lex.approveCandidate(wordKey, { dictionary: state.dictionary });
-  var note = el('wbInboxNote');
+  /* 池's own note element. This used to name wbInboxNote, which no page has ever
+   * had, so the confirmation of an approval was written into nothing. */
+  var note = el('wbPoolNote');
   if (note && created) {
     note.textContent = tText('wb.inbox.approved', { word: wordKey, n: created.cards.length });
     show(note, true);
@@ -728,7 +736,7 @@ async function rejectCandidate(wordKey) {
  * packed into bricks of ten. Nothing here is filed by hand. */
 async function enrolCandidates() {
   var result = await state.lex.enrol({ dictionary: state.dictionary });
-  var note = el('wbInboxNote');
+  var note = el('wbPoolNote');
   if (note) {
     note.textContent = tText('wb.enrol.result', { carded: result.carded, bricks: result.bricks });
     show(note, true);
@@ -914,12 +922,14 @@ async function startRiver() {
   if (RIVER.view) {
     RIVER.token = null;
     RIVER.paused = false;
-    if (el('wbRiverFallback') && !RIVER.view.hasCanvas) { /* no 2D context: refill below */ }
     RIVER.view.resize();
     RIVER.view.start();
     var pauseBtn = el('wbRiverPause');
     if (pauseBtn) pauseBtn.textContent = tText('wb.river.pause');
-    RIVER.lastSpeed = 1;
+    /* The columns kept the speed they were given, so lastSpeed must stay what
+     * applyRiverSpeed() last wrote. Resetting it to 1 here made every return to
+     * 川 apply the current speed on top of an already-scaled field: ×2 became
+     * ×4 on the first round trip and doubled again on each one after that. */
     applyRiverSpeed();
     updateRiverCount();
     renderBucket();
@@ -975,13 +985,19 @@ async function startRiver() {
   }
 }
 
-/* Leaving 川 stops the clock and nothing else: the field, the words and the
- * column widths stay, so returning is a resize and a start rather than a
- * rebuild. Nothing else on the page uses the canvas. */
+/* Leaving 川 stops the clock and hands back whatever the finger was carrying:
+ * the field, the words and the column widths stay, so returning is a resize and
+ * a start rather than a rebuild. release() is what the view exposes for exactly
+ * this and nothing was calling it, so a word picked up and then navigated away
+ * from stayed in the air - and a press that was still maturing could lift a word
+ * onto a view the learner had already left. */
 function stopRiver() {
   RIVER.token = null;
   RIVER.pending = null;
-  if (RIVER.view) RIVER.view.stop();
+  if (RIVER.view) {
+    RIVER.view.release();
+    RIVER.view.stop();
+  }
 }
 
 /* 一新 - the words change. 流速 only changes how fast the same words fall; this
@@ -1043,10 +1059,19 @@ async function bucketToPool() {
   RIVER.bucket = [];
   renderBucket();
   var moved = 0;
+  /* One index for the whole bucket: each addToPool() used to read the words and
+   * the senses for itself, so emptying ten caught words cost twenty reads. */
+  var index = await state.lex.wordIndex();
   for (var i = 0; i < items.length; i += 1) {
     try {
-      var result = await state.lex.addToPool({ wordKey: items[i].term }, { dictionary: state.dictionary });
-      if (result) moved += 1;
+      var result = await state.lex.addToPool({ wordKey: items[i].term }, { dictionary: state.dictionary, index: index });
+      if (result) {
+        moved += 1;
+        /* 池の流れ draws three kinds of entry and only the brick one was ever
+         * written, so arrivals never appeared and the day's "+" was always 0.
+         * An arrival is exactly this: a word handed over by 川. */
+        pushPoolLog({ event: POOL_EVENT.fromRiver, word: items[i].term, at: Date.now() });
+      }
     } catch (err) { /* one bad word does not stop the rest */ }
   }
   var note = el('wbRiverCatch');

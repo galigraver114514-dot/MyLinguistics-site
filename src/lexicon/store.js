@@ -58,6 +58,45 @@ function sourceLabel(source) {
   return null;
 }
 
+/* The inbox's own order: what recurred most, then the better frequency rank,
+ * then the word. Written once so listInbox() and poolAndInbox() cannot drift. */
+function compareInbox(a, b) {
+  if ((b.count || 0) !== (a.count || 0)) return (b.count || 0) - (a.count || 0);
+  var ra = a.rank || Infinity;
+  var rb = b.rank || Infinity;
+  if (ra !== rb) return ra - rb;
+  return a.wordKey < b.wordKey ? -1 : 1;
+}
+
+/* A word/sense index an enrolment batch shares.
+ *
+ * approveCandidate() has to answer "is this lemma already a word, and how many
+ * senses does it have", and addToPool() has to answer the word half of the same
+ * question. Both used to read the two whole tables to do it, so 池's 一括入池
+ * over a few hundred candidates cost two full reads each - quadratic on a table
+ * that is the largest in the database. One index, kept up to date as the batch
+ * writes, makes the loop linear.
+ *
+ * keep() is what makes it safe: without it the second approval of one lemma
+ * would number its sense #0 again and overwrite the first. */
+function batchIndex(words, senses) {
+  var byLemma = new Map();
+  var senseCount = new Map();
+  (words || []).forEach(function (word) { byLemma.set(word.lemma, word); });
+  (senses || []).forEach(function (sense) {
+    senseCount.set(sense.wordId, (senseCount.get(sense.wordId) || 0) + 1);
+  });
+  return {
+    word: function (lemma) { return byLemma.get(lemma) || null; },
+    sensesOf: function (wordIdValue) { return senseCount.get(wordIdValue) || 0; },
+    keep: function (word, sense) {
+      byLemma.set(word.lemma, word);
+      senseCount.set(sense.wordId, (senseCount.get(sense.wordId) || 0) + 1);
+      return word;
+    }
+  };
+}
+
 export class Lexicon {
   constructor(db, options) {
     this.db = db;
@@ -256,21 +295,31 @@ export class Lexicon {
     return buildDigest(items, { now: time, limit: limitValue, band: this.band });
   }
 
-  async stats(now) {
+  /* Counts for the strips.
+   *
+   * Anything the caller hands over here is not read again: a refresh has just
+   * loaded the words, the senses, the cards and the pool, and re-reading four
+   * stores on every graded card was most of what a grade cost. 'encounters' may
+   * be the pool list - every record whose state is not 'new' - because both
+   * counters derived from it (inbox and pool) exclude 'new' anyway. */
+  async stats(now, preloaded) {
+    var pre = preloaded || {};
     var time = now || Date.now();
     var start = new Date(time);
     start.setHours(0, 0, 0, 0);
-    var cards = await this.listCards();
-    var exposures = await this.listExposures();
-    var encounters = await this.listEncounters();
-    var senses = await this.listSenses();
+    var cards = pre.cards || await this.listCards();
+    var exposures = pre.exposures || await this.listExposures();
+    var encounters = pre.encounters || await this.listEncounters();
+    var senses = pre.senses || await this.listSenses();
+    var words = pre.words || await this.listWords();
+    var bricks = pre.bricks || await this.listBricks();
     var reviews = cards.filter(function (c) { return c.srs.phase === 'review'; });
     var mature = cards.filter(function (c) { return (c.srs.stability || 0) >= 21; });
     var familiaritySum = senses.reduce(function (sum, s) {
       return sum + currentFamiliarity(s.recognition, time);
     }, 0);
     return {
-      words: (await this.listWords()).length,
+      words: words.length,
       senses: senses.length,
       cards: cards.length,
       fresh: cards.length - reviews.length - cards.filter(function (c) { return c.srs.phase === 'relearning'; }).length,
@@ -280,7 +329,7 @@ export class Lexicon {
       mature: mature.length,
       inbox: encounters.filter(function (e) { return e.state === 'inbox'; }).length,
       pool: encounters.filter(function (e) { return e.state === 'carded'; }).length,
-      bricks: (await this.listBricks()).filter(function (b) { return b.phase !== 'retired'; }).length,
+      bricks: bricks.filter(function (b) { return b.phase !== 'retired'; }).length,
       exposuresToday: exposures.filter(function (e) { return e.ts >= start.getTime(); }).length,
       recognition: senses.length ? Math.round(familiaritySum / senses.length * 100) : 0
     };
@@ -418,13 +467,27 @@ export class Lexicon {
     var encounters = await this.listEncounters();
     return encounters
       .filter(function (record) { return record.state === 'inbox'; })
-      .sort(function (a, b) {
-        if ((b.count || 0) !== (a.count || 0)) return (b.count || 0) - (a.count || 0);
-        var ra = a.rank || Infinity;
-        var rb = b.rank || Infinity;
-        if (ra !== rb) return ra - rb;
-        return a.wordKey < b.wordKey ? -1 : 1;
-      });
+      .sort(compareInbox);
+  }
+
+  /* 池 draws two cuts of the same table - the words waiting for a brick and the
+   * candidates behind the filter - and it used to read the encounters store once
+   * for each. One read, both lists, in the same order as the two methods above,
+   * so a caller cannot tell the difference. The inbox is a subset of the pool:
+   * its state is 'inbox', which is not 'new'. */
+  async poolAndInbox() {
+    var encounters = await this.listEncounters();
+    var pool = [];
+    var inbox = [];
+    encounters.forEach(function (record) {
+      if (record.state === 'inbox') {
+        inbox.push(record);
+        pool.push(record);
+        return;
+      }
+      if (record.state !== 'new') pool.push(record);
+    });
+    return { pool: pool, inbox: inbox.sort(compareInbox) };
   }
 
   async rejectCandidate(lemma) {
@@ -441,20 +504,16 @@ export class Lexicon {
     var key = normalizeKey(lemma);
     if (!key) return null;
 
-    var words = await this.listWords();
-    var senses = await this.listSenses();
-    var word = null;
-    for (var i = 0; i < words.length; i += 1) {
-      if (words[i].lemma === key) { word = words[i]; break; }
-    }
+    /* A batch hands its index in; a single call builds its own. */
+    var index = opts.index || await this.wordIndex();
+    var word = index.word(key);
     var record = await idb.get(this.db, STORES.encounters, key);
     var contextSentences = opts.sentence
       ? [opts.sentence]
       : (record && record.contexts ? record.contexts.map(function (c) { return c.ja; }) : []);
 
     var id = word ? word.id : wordId(key);
-    var index = 0;
-    senses.forEach(function (sense) { if (sense.wordId === id) index += 1; });
+    var senseNumber = index.sensesOf(id);
 
     var definition = null;
     if (opts.definition) {
@@ -484,7 +543,7 @@ export class Lexicon {
       ? { ja: contextSentences[0], source: (record && record.contexts && record.contexts[0] && record.contexts[0].source) || null }
       : null;
     var sense = makeSense({
-      id: senseId(id, index),
+      id: senseId(id, senseNumber),
       wordId: id,
       definition: definition || { lang: 'ja', text: '', dictId: null, pending: true },
       gloss: null,
@@ -514,6 +573,7 @@ export class Lexicon {
       record.lastSeen = now;
       await idb.put(this.db, STORES.encounters, record);
     }
+    index.keep(word, sense);
     return { word: word, sense: sense, cards: cards, modes: modes };
   }
 
@@ -603,6 +663,12 @@ export class Lexicon {
 
   async getBrick(brickIdValue) { return idb.get(this.db, STORES.bricks, brickIdValue); }
 
+  /* The two tables addToPool() and approveCandidate() need, read once. A loop
+   * that approves several words must share one - see batchIndex(). */
+  async wordIndex() {
+    return batchIndex(await this.listWords(), await this.listSenses());
+  }
+
   /* Everything captured, whatever state it is in. */
   async listPool() {
     var encounters = await this.listEncounters();
@@ -617,11 +683,8 @@ export class Lexicon {
     var lemma = normalizeKey(entry && entry.wordKey);
     if (!lemma) return null;
 
-    var words = await this.listWords();
-    var word = null;
-    for (var i = 0; i < words.length; i += 1) {
-      if (words[i].lemma === lemma) { word = words[i]; break; }
-    }
+    var index = opts.index || await this.wordIndex();
+    var word = index.word(lemma);
 
     var record = await idb.get(this.db, STORES.encounters, lemma);
     if (!record) record = { wordKey: lemma, count: 0, contexts: [], state: 'new' };
@@ -652,6 +715,7 @@ export class Lexicon {
       sentence: entry.sentence || (record.contexts && record.contexts[0] ? record.contexts[0].ja : null),
       pos: entry.pos,
       dictionary: opts.dictionary,
+      index: index,
       now: now
     });
     record.state = 'carded';
@@ -670,6 +734,9 @@ export class Lexicon {
     });
     if (opts.limit) pending = pending.slice(0, opts.limit);
     var carded = 0;
+    /* One index for the whole run: enrolling is the one place that approves a
+     * word per candidate, and it is driven by the size of the inbox. */
+    var index = await this.wordIndex();
     for (var i = 0; i < pending.length; i += 1) {
       var record = pending[i];
       var context = record.contexts && record.contexts[0] ? record.contexts[0] : null;
@@ -678,7 +745,7 @@ export class Lexicon {
         count: record.count,
         rank: record.rank,
         sentence: context ? context.ja : null
-      }, { now: now, dictionary: opts.dictionary, source: context ? context.source : null });
+      }, { now: now, dictionary: opts.dictionary, source: context ? context.source : null, index: index });
       if (result && result.state === 'carded') carded += 1;
     }
     var built = await this.buildBricks({ now: now, partial: !!opts.partial });

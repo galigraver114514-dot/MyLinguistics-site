@@ -178,26 +178,44 @@ export function createField(options) {
     return items.length;
   }
 
+  /* Move first, then wrap.
+   *
+   * Recycling inside the same loop that moves the words reads a half-updated
+   * column: an item later in the array has not taken its step yet, so
+   * columnTop() hands back a stale neighbour and the wrapped word is placed
+   * exactly one step's travel too high. The hole that opens never closes again,
+   * and every wrap can widen it - which is what an occasional gap drifting down
+   * a column is. Both passes are O(n) and the second one only touches the words
+   * that actually left the bottom. */
   function step(dt) {
     if (!dt || dt <= 0) return;
+    var wrapped = [];
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i];
       item.y += item.speed * dt;
-      if (item.y > height) recycle(item);
+      if (item.y > height) wrapped.push(item);
     }
+    for (var w = 0; w < wrapped.length; w += 1) recycle(wrapped[w]);
   }
 
   /* Put a different word in a slot that already exists, keeping where it is.
    * A taken word leaves no hole in its column: another word is already on its
-   * way down that slot, which is what an endless river should do. */
-  function replaceAt(item, word) {
+   * way down that slot, which is what an endless river should do.
+   *
+   * `fade` (default on) is for a word arriving out of sight above the top edge,
+   * where fading in is what makes a recycle read as the river refreshing rather
+   * than as a word teleporting. The two replacements that happen *in view* - the
+   * slot a word was just lifted from, and the slot a word is put back into - must
+   * pass `fade: false`, or the new word is drawn from alpha 0 and the column
+   * shows a blank exactly where the finger is until the fade finishes. */
+  function replaceAt(item, word, options) {
     if (!item) return null;
     var next = word || nextWord();
     if (next && next.term) {
       item.term = String(next.term);
       item.reading = next.reading || '';
       item.height = heightOf(item.term);
-      item.born = now();
+      if (!options || options.fade !== false) item.born = now();
     }
     return item;
   }

@@ -120,6 +120,9 @@ export function createDictionary(options = {}) {
   }
 
   async function restore(id) {
+    // close() dropped every source, and lookup() short-circuits on closed, so
+    // a source restored afterwards would sit in the list answering nothing.
+    if (closed) throw new Error('this dictionary is closed');
     if (!hasStorage()) throw new Error('this environment has no IndexedDB');
     const store = await getStore();
     const existing = sources.some(function (source) { return source.id === id; });
@@ -373,9 +376,21 @@ export function createDictionary(options = {}) {
       return sources.map(describeSource);
     },
 
-    /** Anything that failed to load or restore, in the order it failed. */
+    /**
+     * Anything that failed to load, restore or read, in the order it failed.
+     *
+     * A source can also fail later - a Yomitan bank that will not inflate is
+     * noticed on the lookup that lands in it - so those failures are collected
+     * from the sources too, or they would happen invisibly.
+     */
     problems() {
-      return failures.slice();
+      const out = failures.slice();
+      for (let i = 0; i < sources.length; i++) {
+        if (typeof sources[i].problems !== 'function') continue;
+        const sourceProblems = sources[i].problems();
+        for (let j = 0; j < sourceProblems.length; j++) out.push(sourceProblems[j]);
+      }
+      return out;
     },
 
     /**
@@ -384,6 +399,9 @@ export function createDictionary(options = {}) {
      */
     async importYomitan(file, onProgress) {
       await ready;
+      // Same reason as restore(): after close() a pushed source is unreachable,
+      // so importing one is refused rather than half-done.
+      if (closed) throw new Error('this dictionary is closed');
       let store = null;
       if (hasStorage()) {
         try {
@@ -438,6 +456,11 @@ export function createDictionary(options = {}) {
       return { bytes: estimate.usage, quota: estimate.quota, supported: true };
     },
 
+    /**
+     * Drop every source and spend the dictionary. After this lookup() answers
+     * nothing, and importing or restoring rejects rather than pushing a source
+     * that can never be reached again.
+     */
     close() {
       closed = true;
       for (let i = 0; i < sources.length; i++) {
