@@ -10,6 +10,29 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-23 - T10: grant 1 ends, and the design seat hands the build over
+
+The human has split the work: a new agent writes the code, agent-visual designs.
+So this is the last entry in which this seat edits a file it does not own.
+
+**`docs/design-handoff.md` is the handover** and is written to be read first by
+the build seat:
+
+- the split, and that grant 1 ends with it (so `i18n.js` goes back to needing a
+  REQUEST and an ANSWER);
+- what the app is now, route by route, with the two gestures that are not the
+  obvious ones - **press and hold in 川, and a chip in 桶 is a button**;
+- what this seat's work left in the code, including the two traps: a `transform`
+  on an ancestor of a `position: fixed` element (even one ending at `none`) moves
+  it, and `show()` had to clear the `hidden` attribute as well as the class;
+- **the verification kit as the gate**: `run.mjs` (16 routes, measures rather than
+  looks), `interact.mjs` (13 finger-level checks), `check-overlap.cjs` (the boards,
+  seven rules), `npm test`;
+- the hard conventions, the open decisions, and the design seat's tools with the
+  ones that do not start marked as such.
+
+Nothing in the app changed in this entry: it is documents only.
+
 ## 2026-09-23 - T9: the words are chips, and the rod is deleted
 
 Commit `6877855`, still grant 1. A correction rather than an addition.

@@ -177,6 +177,29 @@ the word in the bucket. Let go anywhere else and it goes back into the river.
 found: the press had been matured inside the animation loop, so a page without
 `requestAnimationFrame` could never pick a word up - it is a timer now.
 
+### The grant closes here
+
+**2026-09-23, later the same day.** The human has split the work: a new agent
+builds the app, and this seat designs. So this is the last entry in which
+agent-visual edits a file it does not own.
+
+The grant was granted for one problem - the app had drifted from the boards and
+a stage of the cycle had gone missing - and that problem is closed: 桶 exists,
+the geometry is the boards', 海 · 辞書 has its panel and its landing state, 復習
+and ブリック総覧 were rebuilt, the river draws chips and takes a word by holding
+it, and eight bugs older than the grant are gone.
+
+Everything a build seat needs to take over is in `docs/design-handoff.md`, and
+it is the only document this seat expects to be read first. From here:
+
+- `src/lexicon/**`, `study.html`, `tests/**` and `.gitignore` are the build
+  seat's, under the ordinary ownership rule;
+- `assets/js/i18n.js` is back to needing a REQUEST and an ANSWER;
+- `designs/**`, the design system in `tokens.css`, the shell, motion and
+  `reader.css`'s visual layer stay with agent-visual.
+
+The ledger stays open. A second grant gets a new section, appended.
+
 ### Deliberately left alone
 
 - **The bucket's chips are buttons, not drag targets.** The board's lede says
