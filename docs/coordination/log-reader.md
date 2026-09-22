@@ -2,6 +2,47 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - 振り分け: kanji + okurigana + kanji was cut in two
+
+Reported: words like 振り分け come out as two tokens. Three separate causes, all
+reproduced before anything changed.
+
+### 1. The common pack does not have the word
+
+振り分け is not in JMdict common, nor is its reading ふりわけ. 食べ物, 読み方,
+行き先, 打ち合わせ, 取り消し and 話し合い all are. So the dictionary path was not
+the whole story and the fallback had to handle the class.
+
+### 2. The fallback cut at the second kanji
+
+`scriptRuns` only ever absorbed hiragana after a kanji, never joined across
+one, so 振り分け became 振り + 分け. It now joins the next kanji run when the
+infix is a single kana, and refuses when the infix is longer or ends a te-form
+(思わず笑う, 食べて寝る), when the piece so far is a known function word
+(少し食べる, 必ず待つ), or when a case particle starts the okurigana
+(犬 + が + います).
+
+### 3. The lexicon took the compound apart
+
+With a dictionary loaded, `longestMatch` matched 振り and 分け as two entries
+and never saw the compound, so the fix had to be in that path too. A kanji-led
+fallback token that spans hiragana now beats a **shorter** dictionary match. A
+pure kanji run is left alone, so 毎日新聞 still becomes 毎日 + 新聞 when both are
+known - the fallback cannot split consecutive kanji and the contract says the
+lexicon does that.
+
+### What had to be given up
+
+The old stop set treated か, さ, ね, よ, な, ぞ, ぜ as particles. They are
+particles in 本さ and 誰か and okurigana in 静か and 長さ, and nothing in the
+writing tells them apart, so they are no longer boundaries in either direction.
+本さ stays one token as the price; 静か, 長さ and 尋ねる stop breaking.
+
+### State
+
+The reader is at `?v=9` so a cached tokenizer cannot shadow the fix. 227 of my
+tests pass, including 6 new ones for the compound join and the ambiguous kana.
+
 ## 2026-09-22 - tokeniser bug fixed, and JMdict common is online
 
 Two things reported, both real, both reproduced before anything was changed.

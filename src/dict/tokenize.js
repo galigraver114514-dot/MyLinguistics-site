@@ -31,6 +31,18 @@
 const MAX_OKURIGANA = 10;
 const MAX_MATCH = 12;
 
+// A compound written kanji + okurigana + kanji has a one-kana infix: 振り分け,
+// 食べ物, 読み方, 取り消し. Two or more kana is an inflection that ends a word
+// (思わず笑う, 歩きながら), so it is a boundary rather than a join.
+const MAX_INFIX = 1;
+
+// Unambiguous case particles: a boundary on either side of a kanji run. The
+// ambiguous singles - か, さ, ね, よ, な, ぞ, ぜ - are deliberately absent
+// because they are particles in 本さ and 誰か but okurigana in 静か and 長さ, and
+// nothing in the writing tells the two apart. The multi-character forms below
+// still match first, so から beats か and など beats な.
+const CASE_PARTICLE = new Set(['は', 'が', 'を', 'に', 'で', 'と', 'も', 'の', 'へ', 'や']);
+
 // Suffixes that are never part of the word a kanji run started. Longest match
 // wins, so まで is tried before で and から before か.
 //
@@ -40,7 +52,7 @@ const MAX_MATCH = 12;
 // because さ is a particle in 本さ and okurigana in させられた. Taking the whole
 // okurigana run and giving a trailing particle back fixes both.
 const PARTICLE_SUFFIX = new Set([
-  'は', 'が', 'を', 'に', 'で', 'と', 'も', 'の', 'へ', 'や', 'か', 'ね', 'よ', 'な', 'ぞ', 'ぜ', 'さ',
+  ...CASE_PARTICLE,
   'まで', 'だけ', 'ほど', 'くらい', 'ぐらい', 'ごろ', 'ばかり', 'こそ', 'って',
   'けど', 'けれど', 'けれども', 'ので', 'のに', 'から', 'より', 'でも', 'では',
   'には', 'とは', 'へは', 'にも', 'とも', 'かも', 'とか', 'だの', 'など',
@@ -65,7 +77,12 @@ export const STOPWORDS = new Set([
   'しか', 'でも', 'しかし', 'そして', 'また', 'まだ', 'もう', 'ので',
   'のに', 'けど', 'けれど', 'ながら', 'たり', 'ばかり', 'ほど', 'くらい',
   'ぐらい', 'ごろ', 'らしい', 'そう', 'どう', 'とても', '少し', 'ちょっと',
-  'いつも', '時々', 'まず', 'すぐ', 'よく', 'もっと', 'すべて', '全部', 'みんな'
+  'いつも', '時々', 'まず', 'すぐ', 'よく', 'もっと', 'すべて', '全部', 'みんな',
+  // kanji + one kana adverbs. They are followed by a verb often enough that the
+  // compound join would swallow the verb - 必ず + 待つ is two words while
+  // 読み + 方 is one - so scriptRuns needs them as a boundary as well as
+  // isContent needing them as a filter.
+  '必ず', '全く', '暫く', '再び', '直ぐ', '専ら', '余り', '予め'
 ]);
 
 // Every particle is a function word and none of them is content. Kept in step
@@ -123,22 +140,60 @@ export function classify(surface) {
  * How many trailing code points of a hiragana run are a particle or copula.
  * chars[from..to) is the run, and the result is always at most to - from.
  */
+function hasHiragana(surface) {
+  for (let i = 0; i < surface.length; i++) {
+    const cp = surface.charCodeAt(i);
+    if (cp >= 0x3041 && cp <= 0x309f) return true;
+  }
+  return false;
+}
+
 function trailingSuffixLength(chars, value, from, to) {
   for (let len = to - from; len >= 1; len--) {
     const start = to - len;
     const surface = value.slice(chars[start].start, chars[to - 1].end);
-    if (PARTICLE_SUFFIX.has(surface)) return len;
+    if (PARTICLE_SUFFIX.has(surface)) {
+      // ん + で is a verb's で-form (読んで, 遊んで), not the particle で. The
+      // particle is only a particle when something else precedes it.
+      if (surface.charAt(0) === 'で' && start > from && chars[start - 1].ch === 'ん') continue;
+      return len;
+    }
     if (start === from && BARE_COPULA.has(surface)) return len;
   }
   return 0;
 }
 
 /**
+ * A kanji run with its retained okurigana, as char indices.
+ *
+ * kanjiEnd is where the okurigana starts, and end is the chunk's end after a
+ * trailing particle has been given back - so end === kanjiEnd means the run
+ * stands alone and the next char is the particle that was returned.
+ */
+function readKanjiChunk(chars, value, start) {
+  let j = start + 1;
+  while (j < chars.length && classOf(chars[j].cp) === 'kanji') j += 1;
+  let k = j;
+  // A case particle right after the kanji run is not okurigana: 犬がいます is
+  // 犬 + が + います, and absorbing the が is what made it one token before.
+  if (k >= chars.length || classOf(chars[k].cp) !== 'hiragana' || !CASE_PARTICLE.has(chars[k].ch)) {
+    let extra = 0;
+    while (k < chars.length && classOf(chars[k].cp) === 'hiragana' && extra < MAX_OKURIGANA) {
+      k += 1;
+      extra += 1;
+    }
+  }
+  return { from: start, kanjiEnd: j, end: k - trailingSuffixLength(chars, value, j, k) };
+}
+
+/**
  * Script-run segmentation. No lexicon needed, and the fallback.
  *
- * A kanji run takes the whole following hiragana run - up to the cap - and then
- * gives back a trailing particle, so 食べるまで is 食べる + まで rather than
- * 食べるま + で, while 食べる keeps its okurigana and 食べさせられた survives さ.
+ * A kanji run takes its whole okurigana run - up to the cap - and gives back a
+ * trailing particle, so 食べるまで is 食べる + まで while 食べさせられた
+ * survives さ. It then joins the next kanji run across a one-kana infix, which
+ * is how 振り分け and 食べ物 stay one word. A longer infix, a te-form ending, or
+ * a chunk that is already a known function word stops the join.
  */
 export function scriptRuns(text) {
   const value = String(text == null ? '' : text);
@@ -151,21 +206,27 @@ export function scriptRuns(text) {
     while (j < chars.length && classOf(chars[j].cp) === cls) j += 1;
 
     if (cls === 'kanji') {
-      let k = j;
-      let extra = 0;
-      while (k < chars.length && classOf(chars[k].cp) === 'hiragana' && extra < MAX_OKURIGANA) {
-        k += 1;
-        extra += 1;
+      let chunk = readKanjiChunk(chars, value, i);
+      while (chunk.end < chars.length && classOf(chars[chunk.end].cp) === 'kanji') {
+        const surface = value.slice(chars[chunk.from].start, chars[chunk.end - 1].end);
+        const infix = chunk.end > chunk.kanjiEnd
+          ? value.slice(chars[chunk.kanjiEnd].start, chars[chunk.end - 1].end)
+          : '';
+        if (infix.length === 0 || infix.length > MAX_INFIX) break;
+        const lastKana = infix.charAt(infix.length - 1);
+        if (lastKana === 'て' || lastKana === 'で') break;
+        if (STOPWORDS.has(surface)) break;
+        const next = readKanjiChunk(chars, value, chunk.end);
+        if (next.end <= chunk.end) break;
+        chunk = { from: chunk.from, kanjiEnd: next.kanjiEnd, end: next.end };
       }
-      const stop = k - trailingSuffixLength(chars, value, j, k);
-      const last = stop - 1;
       tokens.push({
-        surface: value.slice(chars[i].start, chars[last].end),
-        start: chars[i].start,
-        end: chars[last].end,
+        surface: value.slice(chars[chunk.from].start, chars[chunk.end - 1].end),
+        start: chars[chunk.from].start,
+        end: chars[chunk.end - 1].end,
         cls: cls
       });
-      i = stop;
+      i = chunk.end;
       continue;
     }
 
@@ -206,11 +267,14 @@ function matchLength(value, index, lexicon, maxLength) {
  * this consults the index already in memory instead of copying half a million
  * strings into a Set.
  *
- * The one non-obvious part: when nothing matches at the current position the
- * next match may start one or two characters later, because a hiragana run
- * holds both an inflection and a following particle. 犬がいます must become
+ * Two non-obvious parts. When nothing matches at the current position the next
+ * match may start one or two characters later, because a hiragana run holds
+ * both an inflection and a following particle: 犬がいます must become
  * 犬 + が + います, so the gap up to the next match is script-run segmented
- * rather than the whole remaining run being swallowed.
+ * rather than the whole remaining run being swallowed. And when the dictionary
+ * has the pieces of a compound but not the compound itself - 振り and 分け but
+ * no 振り分け - the kanji-led fallback token wins if it is longer, or the
+ * compound would be taken apart by its own dictionary entries.
  */
 export function longestMatch(text, lexicon, options) {
   const value = String(text == null ? '' : text);
@@ -220,14 +284,32 @@ export function longestMatch(text, lexicon, options) {
   const maxGap = opts.maxGap || 24;
   const tokens = [];
   let i = 0;
+  // Enough for any single token: a kanji run plus its okurigana. Slicing more
+  // would make this loop quadratic over a chapter.
+  const leadWindow = maxLength + MAX_OKURIGANA + 2;
+
   while (i < value.length) {
     const len = matchLength(value, i, lexicon, maxLength);
+
+    // A kanji-led fallback token that spans hiragana is trusted when it beats
+    // the dictionary match here. Without this, 振り分け is cut at the first
+    // match inside it - 振り 分け - because the common pack has both halves but
+    // not the compound. A pure kanji run is left to the lexicon, so 毎日新聞
+    // still becomes 毎日 + 新聞.
+    const lead = scriptRuns(value.slice(i, i + leadWindow))[0];
+    if (lead && lead.end > len && classOf(lead.surface.codePointAt(0)) === 'kanji' && hasHiragana(lead.surface)) {
+      tokens.push({ surface: lead.surface, start: i + lead.start, end: i + lead.end, cls: lead.cls });
+      i += lead.end;
+      continue;
+    }
+
     if (len > 0) {
       const surface = value.slice(i, i + len);
       tokens.push({ surface: surface, start: i, end: i + len, cls: classify(surface) });
       i += len;
       continue;
     }
+
     let j = i + 1;
     const limit = Math.min(value.length, i + maxGap);
     while (j < limit && matchLength(value, j, lexicon, maxLength) === 0) j += 1;

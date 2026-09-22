@@ -13,17 +13,17 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=8';
-import { buildChapter } from './text-model.js?v=8';
-import { prepareAndMount } from './render.js?v=8';
-import { SAMPLE_BOOK } from './sample.js?v=8';
-import { createLookup } from './lookup.js?v=8';
-import { createDictionary } from '../../src/dict/index.js?v=8';
-import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=8';
-import { createPainter } from './highlight.js?v=8';
-import { createLibrary } from './library.js?v=8';
-import { openAnnotations } from './annotations.js?v=8';
-import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=8';
+import { openEpub } from './epub.js?v=9';
+import { buildChapter } from './text-model.js?v=9';
+import { prepareAndMount } from './render.js?v=9';
+import { SAMPLE_BOOK } from './sample.js?v=9';
+import { createLookup } from './lookup.js?v=9';
+import { createDictionary } from '../../src/dict/index.js?v=9';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=9';
+import { createPainter } from './highlight.js?v=9';
+import { createLibrary } from './library.js?v=9';
+import { openAnnotations } from './annotations.js?v=9';
+import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=9';
 
 /**
  * Bumped together with the query strings above.
@@ -34,7 +34,7 @@ import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selec
  * running version is visible on screen, which is the only way to tell a stale
  * cache apart from a real bug from a bug report.
  */
-const APP_VERSION = 'js r8';
+const APP_VERSION = 'js r9';
 
 const SETTINGS_KEY = 'reader.settings.v2';
 const POSITIONS_KEY = 'reader.positions.v2';
@@ -1843,7 +1843,7 @@ if (typeof document !== 'undefined') {
 }
 
 const buildEl = document.getElementById('build');
-if (buildEl) buildEl.textContent = 'html r8 · ' + APP_VERSION;
+if (buildEl) buildEl.textContent = 'html r9 · ' + APP_VERSION;
 
 // If the previous run never reached "done", its last stage is still in storage.
 // Say so, instead of leaving the next run to reproduce the same freeze blind.

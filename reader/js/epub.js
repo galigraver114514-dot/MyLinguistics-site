@@ -11,7 +11,7 @@
  * because the same element can appear as <dc:title>, <title> or with any other
  * prefix depending on how the book was produced.
  */
-import { openZip } from '../../src/zip.js?v=8';
+import { openZip } from '../../src/zip.js?v=9';
 
 const XHTML_TYPES = new Set([
   'application/xhtml+xml',

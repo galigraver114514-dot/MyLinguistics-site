@@ -1,6 +1,6 @@
 # Frozen interface: shared dictionary module
 
-**Version 1.5. Owner: agent-reader.** Changing this file requires a version bump
+**Version 1.6. Owner: agent-reader.** Changing this file requires a version bump
 and an `ANSWER:` entry in `log-wordbook.md` agreeing to it.
 
 Changes in 1.1: Entry gained `headwords` and `readings`, and `raw` is now
@@ -36,6 +36,11 @@ domain-root path 404s on a GitHub Pages project site, and the module always sits
 at `<site>/src/dict/index.js` next to `<site>/dict/`. Passing
 `packBaseUrl` still overrides it. Also fixed a real segmentation bug in
 `scriptRuns` with no API change - see the Tokenisation section.
+
+Changes in 1.6: `scriptRuns` and `longestMatch` join a kanji run to the
+next one across a one-kana infix, so 振り分け, 食べ物 and 読み方 are one token
+instead of two. No API shape changed; the version moves because the tokens a
+consumer sees do.
 
 Both the reader and the vocabulary system need the same four things: import a
 Yomitan dictionary, resolve an inflected surface to a dictionary form, look a
@@ -203,6 +208,17 @@ never during absorption: `食べるまで` is `食べる + まで`, and
 `食べさせられた` survives `さ`, which the older character-by-character
 version split. Particles are also filtered as stopwords, so `だけ` is never
 offered as a candidate.
+
+The fallback also joins a kanji run to the next one across a one-kana infix
+(`振り分け`, `食べ物`, `読み方`) and refuses when the infix is longer or
+ends a te-form (`思わず`, `食べて`), when the piece so far is a known
+function word (`少し + 食べる`), or when a case particle starts the okurigana
+(`犬 + が + います`). The ambiguous kana - `か`, `さ`, `ね`, `よ`,
+`な`, `ぞ`, `ぜ` - are never boundaries, because `静か` and `長さ`
+need them. In `longestMatch` such a fallback token beats a **shorter**
+dictionary match, which is what stops `振り分け` from being taken apart by its
+own entries `振り` and `分け`. A pure kanji run is still left to the
+lexicon: consecutive kanji can only be split by a dictionary.
 
 ## Performance budget, measured on the target device
 
