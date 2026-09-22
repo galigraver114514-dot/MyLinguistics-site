@@ -1,6 +1,6 @@
 # Interface: the shared shell and the reader
 
-**Version 0.4. Owner: agent-visual for the shell, the design system and
+**Version 0.5. Owner: agent-visual for the shell, the design system and
 `reader/reader.css`; agent-reader for `reader/index.html` and `reader/js/**`.
 Changing this file is agent-reader's, since it lives in `docs/`.**
 
@@ -8,6 +8,14 @@ Version 0.3 was written when the shell belonged to agent-wordbook. The human
 reassigned the visual layer to agent-visual on 2026-09-22 (see
 `README.md`'s map), and 0.4 records that plus the three seams that came out of
 it: the page theme, the progress rail, and the version number.
+
+**0.5 is the embedding.** `reader/index.html` now carries the capsule, the
+same static markup every page carries with the paths adjusted for `/reader/`,
+and loads `tokens.css`, `shell.css`, `i18n.js`, `app.js` and
+`shell.js` beside its own module. The reader's own bar and footer are hidden, its
+actions are mounted into `.capsule-inner`, and two commands joined that list
+because the footer was where text size lived. See "The reader page carries the
+shell" below for the four rules that came out of it.
 
 0.4 additions, all of them already implemented on both sides:
 
@@ -47,8 +55,14 @@ No cooperation is required. `shellPresent()` is true if any of these hold:
 - `document.documentElement.dataset.shell === 'on'`, kept for a future
   explicit opt-in;
 - `document.body.classList.contains('has-shell')`, which is what shell.js adds;
-- the shell's own markup is present:
-  `document.querySelector('.tabbar, .navbar, .capsule, #tabbar')`.
+- the shell's own markup is present **and the shell's script is tagged in
+  the page**: `document.querySelector('.tabbar, .navbar, .capsule, #tabbar')`
+  plus `document.querySelector('script[src*="shell.js"]')`.
+
+  The script half is not decoration. The two signals above mean "shell.js ran";
+  this one means "it will run, or it never will". Standing the reader's own bar
+  down on markup alone would leave nothing to open a book with if the script
+  never arrived, so markup counts only where the script that wires it does.
 
 Their `markShell()` sets both `data-shell="on"` and `body.has-shell` before
 any other work, which is exactly what the reader listens for.
@@ -118,14 +132,52 @@ Their `wireReader()` consumes exactly this: it renders `actions()` into
 and on every `on('title')`. Nothing on either side needs to change for that to
 keep working.
 
-## The one thing the reader needs from the shell side
+## The reader page carries the shell
 
-The shell's markup is static in each page, so adopting it means editing
-`reader/index.html`, which is agent-reader's file. Rather than hand the file
-over, paste the exact nav-bar and tab-bar block for a reader page - or point at
-a page that already has it - and the reader will add it together with the
-stylesheet and script tags. `shell.js` already resolves the `/reader/` path
-to the `reader` tab, so nothing else should be needed.
+Done in 0.5. Four rules came out of it, and each one is load bearing.
+
+**1. `.shell-content` wraps the reading surface, and `#rail` stays inside it
+after `#viewport`.** shell.css gives the class `flex: 1 1 auto; min-height: 0;
+overflow: hidden` but no flex direction, because no other page has a wrapper and
+needs one. `#viewport` takes its height from being a flex child, so the page
+carries two rules of its own:
+
+    .shell-content { display: flex; flex-direction: column; }
+    .shell-content > #viewport { flex: 1 1 auto; min-height: 0; }
+
+They duplicate what `body.shell-embedded .shell-content` already says in
+`reader/reader.css`, and they are the only styling `reader/index.html` holds.
+**REQUEST to agent-visual: fold both into `shell.css`'s `.shell-content` rule
+and the reader's two lines go away.**
+
+**2. `assets/css/style.css` is deliberately not loaded.** It is the legacy
+component layer, it has no markup on this page, and it is the only sheet that
+consumes the shell's `--accent` - which `reader.css` redefines as sepia page
+ink. Loading it would give the reader page a sepia accent where every other page
+is blue. See "the accent hazard" below.
+
+**3. The reader's module is tagged before `shell.js`.** The module is deferred,
+so it executes before `DOMContentLoaded`; `shell.js` is a classic script that
+registers a `DOMContentLoaded` handler, and that handler is what calls
+`wireReader()` and looks for `window.Reader`. Reversed, the actions would have
+nowhere to mount and nothing would say so. A test asserts the order in the file,
+because the failure is silent in a browser.
+
+**4. Markup alone does not make the reader stand down its own bar.** See
+"How the reader detects the shell".
+
+### Buttons the shell renders
+
+`window.Reader.actions()` is now
+
+    file, toc, dict, bookmark, smaller, larger, settings
+
+`smaller` and `larger` are new in 0.5, and they are not decoration: embedding
+hides `#foot`, which was the only place text size lived. Page turns need no
+action - swipe, the margin taps and the arrow keys all still work.
+`wireReader()` renders whatever length the list is, so nothing on the shell side
+had to change; it did have to be written down, because a shell that renders four
+buttons and a reader that offers seven fail silently.
 
 ## The page theme: `data-page-theme`, and why not `data-theme`
 
@@ -189,9 +241,11 @@ agent-visual's contract, implemented as written:
 ## Version numbers: one number for the whole reader
 
 `reader/index.html` is the single place that names a version: every
-`?v=N` in `reader/js/**` and the two references in the page itself - the
-module script and `reader.css` - carry the same N, and the visible `#build`
-stamp says `html rN`.
+`?v=N` in `reader/js/**` and all six references in the page itself - three
+stylesheets (`tokens.css`, `shell.css`, `reader.css`) and three scripts
+(the reader's module, plus the shell's `i18n.js`, `app.js` and
+`shell.js`) - carry the same N, and the visible `#build` stamp says `html rN`.
+The stamp is rewritten at runtime from that same number.
 
 GitHub Pages serves with `cache-control: max-age=600`, so a stale module is a
 10 minute bug that looks like a broken feature. **A mismatched `?v=` is worse
@@ -215,9 +269,35 @@ in `log-visual.md` when `reader/reader.css` changes appearance and
 agent-reader bumps the number in the next commit. A restyle arriving up to ten
 minutes late is acceptable; a restyle that never arrives is not.
 
+## The accent hazard
+
+`tokens.css` says `--accent: var(--tint)` - the accent is the system tint.
+`reader.css` says `--accent: #7a5c3e` - the accent is sepia page ink. Same
+name, two meanings, and the page loads both.
+
+Today this is **latent**: nothing loaded on the reader page consumes the shell's
+`--accent`. `shell.css` does not use it and `style.css` is deliberately not
+loaded. It becomes visible the moment any shell rule on this page uses
+`var(--accent)` - the capsule's active state being the obvious candidate - and
+then exactly one page in the site would be sepia where every other is blue.
+
+It is the `data-theme` collision one layer down, and it gets the same
+treatment: **REQUEST to agent-visual to rename the reader's four `--accent`
+uses to `--page-accent`,** which is the namespace the reader already owns for
+page colours. Until then, do not use `--accent` in a rule that has to work on
+the reader page.
+
 ## Standalone must keep working
 
 `reader/index.html` stays openable on its own: on desktop, and in the jsdom
-page tests that load the real file and click the real buttons. If
-`assets/js/shell.js` is missing or throws, the reader degrades to exactly what
-it is today, never to a blank page.
+page tests that load the real file and click the real buttons. It is now a shell
+page, so "standalone" means embedded - the capsule is there and the reader's own
+bar is hidden - and the tests assert that.
+
+The contract that still holds is the fallback. If `assets/js/shell.js` is
+missing or throws, the reader degrades to what it was before embedding, never to
+a blank page. That is why the markup alone does not count as a shell: the
+reader's file, table of contents and settings buttons are mounted into the
+capsule **by that script**, so a page carrying the capsule without it would hide
+the reader's own bar and give back nothing. A test removes the script element
+and asserts the bar comes back.

@@ -2,6 +2,98 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-23 - the reader moves into the shell, and text size moves with it
+
+Design plan step 3, the reader's half. `?v=14`. The page now carries the
+same static capsule every other page carries, loads the shell's stylesheet and
+scripts, wraps its reading surface in the shell's measured box, and hands its
+own actions to the capsule. Its own bar and footer are hidden, which is the
+point: the reader stops being a separate world.
+
+### Four rules, each of which fails silently if reversed
+
+1. **`.shell-content` wraps `#viewport` and `#rail`.** shell.css gives the
+   class its flex sizing but no flex direction, because no other page has a
+   wrapper and needs one; `#viewport` takes its height from being a flex child,
+   so without a direction the surface collapses. The page carries two rules to
+   say so, and they duplicate `body.shell-embedded .shell-content` in
+   `reader/reader.css` - REQUEST below to fold them into shell.css and delete
+   the duplication.
+2. **`style.css` is deliberately not loaded.** It is the legacy component layer
+   and the only sheet that consumes the shell's `--accent`, which `reader.css`
+   redefines as sepia. Loading it would make this the one sepia page in a blue
+   site.
+3. **The reader's module is tagged before `shell.js`.** The module is deferred
+   and `shell.js` is classic with a `DOMContentLoaded` handler; that handler is
+   what mounts the reader's actions into `.capsule-inner`. Reversed, the
+   actions have nowhere to go and nothing throws. A test asserts the order in the
+   file, because a browser would not tell anyone.
+4. **Markup alone does not stand the reader's bar down.** The two class signals
+   mean "shell.js ran". Markup means "it will run, or it never will", and the
+   reader's file, toc and settings buttons are mounted **by that script** - so on
+   markup alone the reader would hide its own bar and get nothing back. Markup
+   now counts only where the script that wires it is also in the page.
+
+### Text size had to move, because the footer was where it lived
+
+Hiding `#foot` removes `A−`, `A＋`, the page counter and the prev/next
+buttons. Page turns are covered - swipe, the margin taps and the arrow keys all
+still work, and the rail now shows position - but **text size was only in that
+footer**. `window.Reader.actions()` gains `smaller` and `larger`, wired to
+the same functions the footer buttons call rather than to copies of them, and
+`interface-shell.md` goes to **0.5** to say so. `wireReader()` renders whatever
+length the list is, so the shell side needed no change - but a shell that
+rendered four buttons for a reader that offered seven would have failed
+silently, which is why it is written down.
+
+### Two REQUESTs
+
+    REQUEST: fold the reading surface's flex rules into .shell-content
+      to: agent-visual
+      why: reader/index.html now carries .shell-content and #viewport in a way
+        that only works if the box is a flex column. shell.css sizes the class
+        but does not direct it, and reader/reader.css already repeats the
+        direction under body.shell-embedded - so the rule exists twice and the
+        page holds the third copy.
+      shape: add display: flex; flex-direction: column to .shell.css's
+        .shell-content rule, and flex: 1 1 auto; min-height: 0 to a
+        .shell-content > #viewport rule. My two lines and your duplicated one
+        both go away.
+      blocks: nothing - it works today, with the rule in three places
+      needs-by: whenever
+
+    REQUEST: rename the reader's --accent to --page-accent
+      to: agent-visual
+      why: tokens.css defines --accent: var(--tint) - the accent is the system
+        tint. reader.css defines --accent: #7a5c3e - the accent is sepia ink.
+        Same name, two meanings, both loaded on the reader page. Latent today
+        because nothing loaded here consumes the shell's --accent (style.css is
+        not loaded and shell.css does not use it), and visible the moment any
+        shell rule on this page does.
+      shape: four lines in reader/reader.css - the :root definition, the night
+        override, button:hover and button.on. --page-accent is the namespace the
+        reader already owns for page colours.
+      blocks: nothing, but it is the difference between "latent" and "one page
+        is sepia"
+      needs-by: before any shell rule on this page uses var(--accent)
+
+### What is verified, and what only you can verify
+
+jsdom tests cover the structure and the wiring: the capsule and its slots, the
+reading destination's href, `.shell-content` containing both `#viewport` and
+`#rail` in that order, `lang="ja"` pinned on the prose, the reader standing down
+and coming back when the script element is removed, the script order, and
+`A＋`/`A−` through the shell actually resizing the page. 252 tests pass.
+
+**Not verified: what it looks like.** There is no browser here, jsdom has no
+layout, and the reading surface, the capsule and the 2px rail are now laid out
+against each other for the first time. The geometry is the thing to look at
+first on the device: the top inset under the capsule, the rail at the bottom
+edge, and whether `#rail`'s 2px track reads as a progress rail or as a stray
+hairline.
+
+---
+
 ## 2026-09-23 - the rail's fill had no colour, because the page never loaded the tokens
 
 reader/reader.css draws the fill with `background: var(--tint)`, and `--tint` is a

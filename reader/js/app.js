@@ -13,19 +13,19 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=13';
-import { buildChapter } from './text-model.js?v=13';
-import { prepareAndMount } from './render.js?v=13';
-import { SAMPLE_BOOK } from './sample.js?v=13';
-import { createLookup } from './lookup.js?v=13';
-import { createDictionary } from '../../src/dict/index.js?v=13';
-import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=13';
-import { createPainter } from './highlight.js?v=13';
-import { createLibrary } from './library.js?v=13';
-import { openAnnotations } from './annotations.js?v=13';
-import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=13';
-import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=13';
-import { createBookmarks, bookmarkLabel, findBookmark } from './bookmarks.js?v=13';
+import { openEpub } from './epub.js?v=14';
+import { buildChapter } from './text-model.js?v=14';
+import { prepareAndMount } from './render.js?v=14';
+import { SAMPLE_BOOK } from './sample.js?v=14';
+import { createLookup } from './lookup.js?v=14';
+import { createDictionary } from '../../src/dict/index.js?v=14';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=14';
+import { createPainter } from './highlight.js?v=14';
+import { createLibrary } from './library.js?v=14';
+import { openAnnotations } from './annotations.js?v=14';
+import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=14';
+import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=14';
+import { createBookmarks, bookmarkLabel, findBookmark } from './bookmarks.js?v=14';
 
 /**
  * The version this module was actually fetched under, read back from its own URL.
@@ -2146,19 +2146,25 @@ els.viewport.addEventListener('scroll', function () {
 els.prev.addEventListener('click', function () { scrollByScreen(-1); });
 els.next.addEventListener('click', function () { scrollByScreen(1); });
 
-els.smaller.addEventListener('click', function () {
+/* Named, because the shell mounts the same commands as buttons in the
+ * capsule once the reader is embedded and its own footer is hidden. A shell
+ * button runs the real command rather than a copy of it. */
+function shrinkText() {
   state.settings.fontSize = Math.max(14, state.settings.fontSize - 1);
   applyLayout();
   saveSettings();
   repaginateKeepingPlace();
-});
+}
 
-els.larger.addEventListener('click', function () {
+function growText() {
   state.settings.fontSize = Math.min(34, state.settings.fontSize + 1);
   applyLayout();
   saveSettings();
   repaginateKeepingPlace();
-});
+}
+
+els.smaller.addEventListener('click', shrinkText);
+els.larger.addEventListener('click', growText);
 
 els.open.addEventListener('click', openLibrarySheet);
 els.sample.addEventListener('click', function () {
@@ -2245,11 +2251,19 @@ function shellEmit(name, value) {
   }
 }
 
+/* What the shell renders. The reader never learns what the buttons look like
+ * and the shell never learns what they do (interface-shell.md 0.5).
+ *
+ * The two text-size commands are here because embedding hides the reader's own
+ * footer, and that footer was the only place they lived. Page turns do not need
+ * an action: swipe, the margin taps and the arrow keys all still work. */
 const READER_ACTIONS = [
   { id: 'file', label: 'ファイル' },
   { id: 'toc', label: '目次' },
   { id: 'dict', label: '辞書' },
   { id: 'bookmark', label: 'しおり' },
+  { id: 'smaller', label: 'A−' },
+  { id: 'larger', label: 'A＋' },
   { id: 'settings', label: '表示' }
 ];
 
@@ -2258,25 +2272,42 @@ function shellAction(id) {
   else if (id === 'toc') openSheet('目次', buildToc);
   else if (id === 'dict') openDictionarySheet();
   else if (id === 'bookmark') openBookmarksSheet();
+  else if (id === 'smaller') shrinkText();
+  else if (id === 'larger') growText();
   else if (id === 'settings') openSheet('表示', buildSettings);
 }
 
 /**
  * Is the shared shell wrapping this page?
  *
- * Three signals, because the two scripts race: shell.js adds has-shell on
- * DOMContentLoaded, this module can run first, and the shell's markup is
- * static in the page. Any one of them is enough, and none of them asks the
- * shell to know this function exists.
+ * Two kinds of signal, and they are not equivalent.
+ *
+ * **The shell's script ran.** It sets data-shell="on" and body.has-shell before
+ * any other work, and it exposes window.ML.shell. That is proof the navigation
+ * is wired, so standing the reader's own bar down loses nothing.
+ *
+ * **The shell's markup is in the page.** Static, so the capsule or the old bars
+ * are there before any script runs. On its own this is not enough: the reader's
+ * file, table of contents and settings buttons are mounted into the capsule by
+ * shell.js, so a page carrying the markup without the script would leave the
+ * reader with no way to open a book - the exact failure the contract in
+ * interface-shell.md forbids ("if shell.js is missing, the reader degrades to
+ * what it is today, never to a blank page"). Markup therefore counts only on a
+ * page that also carries the script, which every real shell page does.
+ *
+ * None of this asks the shell to know this function exists.
+ *
+ * The selector lists four names on purpose. .tabbar and .navbar matched the
+ * classes the old static bars carried; .capsule is the class every page carries
+ * now; #tabbar is there because the pages keep that **id**, and a class
+ * selector never matches an id.
  */
 function shellPresent() {
   if (typeof document === 'undefined') return false;
   if (document.documentElement.getAttribute('data-shell') === 'on') return true;
   if (document.body && document.body.classList.contains('has-shell')) return true;
-  // The id is kept for the old markup, the capsule is what every page carries
-  // now. A selector for .tabbar matches a class, so an id named #tabbar would
-  // never have been found by it - hence both.
-  return !!document.querySelector('.tabbar, .navbar, .capsule, #tabbar');
+  if (!document.querySelector('.tabbar, .navbar, .capsule, #tabbar')) return false;
+  return !!document.querySelector('script[src*="shell.js"]');
 }
 
 function syncEmbed() {

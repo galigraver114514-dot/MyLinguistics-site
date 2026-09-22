@@ -14,10 +14,46 @@
      chooses to read from them - and it chooses --tint for the progress rail's
      fill, which was undefined on this page until now: the fill's background was
      an invalid declaration, so the rail drew its track and nothing else. -->
-<link rel="stylesheet" href="../assets/css/tokens.css?v=13">
-<link rel="stylesheet" href="reader.css?v=13">
+<link rel="stylesheet" href="../assets/css/tokens.css?v=14">
+<link rel="stylesheet" href="../assets/css/shell.css?v=14">
+<link rel="stylesheet" href="reader.css?v=14">
+<!-- assets/css/style.css is deliberately not loaded: it is the legacy component
+     layer, it has no markup on this page, and it is the one sheet that consumes
+     the shell's --accent - which reader.css redefines as sepia. See
+     docs/coordination/interface-shell.md, "the accent hazard". -->
+<style>
+  /* .shell-content is the shell's measured box, and shell.css gives it
+     flex: 1 1 auto; min-height: 0; overflow: hidden - but not a flex direction,
+     because every other page has no wrapper and does not need one. The reading
+     surface does: #viewport takes its height from being a flex child, and
+     without this the wrapper would collapse it. Two rules, and agent-visual has
+     a REQUEST to fold them into .shell-content itself. */
+  .shell-content { display: flex; flex-direction: column; }
+  .shell-content > #viewport { flex: 1 1 auto; min-height: 0; }
+</style>
 </head>
 <body>
+
+<!-- The shared shell's navigation, the same markup every page carries. It is
+     static, so the page works without JavaScript; shell.js marks the document,
+     fills in its labels, mounts the reader's own actions (window.Reader) into
+     .capsule-inner, and marks the reader destination active from the /reader/
+     path. Without that script the capsule is inert, which is why
+     reader/js/app.js stands its own bar down only when the shell is really
+     wired - see shellPresent(). -->
+<nav class="capsule" id="tabbar" aria-label="Main navigation">
+  <div class="capsule-inner header-inner">
+    <a class="capsule-brand" href="../index.html" aria-label="MyLinguistics">
+      <span class="brand-mark" aria-hidden="true">ML</span>
+    </a>
+    <a class="tabbar-item" href="../index.html" data-tab="home"><span class="tabbar-label" data-i18n="nav.home">Home</span></a>
+    <a class="tabbar-item" href="index.html" data-tab="reader"><span class="tabbar-label" data-i18n="nav.reading">Reading</span></a>
+    <a class="tabbar-item" href="../study.html#wall" data-tab="vocab"><span class="tabbar-label" data-i18n="nav.vocab">Vocabulary</span></a>
+    <span class="capsule-rule" aria-hidden="true"></span>
+    <span class="capsule-lang" id="siteUiLangWrap"></span>
+    <button class="icon-btn icon-btn-glyph" id="shellMore" type="button" aria-haspopup="dialog" aria-label="More" data-i18n-aria="shell.more">&hellip;</button>
+  </div>
+</nav>
 
 <header id="bar">
   <button id="btn-open" type="button">ファイル</button>
@@ -29,7 +65,13 @@
   <button id="btn-settings" type="button">表示</button>
 </header>
 
-<main id="viewport" class="vertical" tabindex="0" aria-label="本文">
+<div class="shell-content">
+<!-- lang is pinned here rather than left to the document element: the shell's
+     chrome is translated, so site app.js sets <html lang> to the interface
+     language, and the text below is Japanese either way. Han glyph choice
+     follows lang, so letting a Chinese interface language reach the prose would
+     render it with the wrong variants. -->
+<main id="viewport" class="vertical" tabindex="0" aria-label="本文" lang="ja">
   <article id="content"></article>
   <div id="empty">
     <p>「ファイル」から本棚を開くか、サンプルを表示してください。</p>
@@ -39,12 +81,14 @@
 
 <!-- Reading position. A sibling of #viewport and after it, because the
      stylesheet tells vertical writing apart with #viewport.vertical ~ #rail
-     and flips the fill's origin to the right in that mode. The reader only
-     moves --progress; the rail has no styling of its own here, so it is
-     invisible until reader/reader.css draws it. See interface-shell.md 0.4. -->
+     and flips the fill's origin to the right in that mode. The reader writes
+     --progress and the ARIA values; reader.css draws the track and the fill,
+     and pins the whole thing to the bottom edge once the shell is embedded.
+     See docs/coordination/interface-shell.md 0.4. -->
 <div id="rail" role="progressbar" aria-label="読書位置"
      aria-valuemin="1" aria-valuemax="1" aria-valuenow="1">
   <div id="rail-fill"></div>
+</div>
 </div>
 
 <div id="note-markers" aria-hidden="true"></div>
@@ -54,7 +98,7 @@
   <span id="page-info">- / -</span>
   <button id="btn-next" type="button" aria-label="次のページ">&rsaquo;</button>
   <span class="spacer"></span>
-  <span id="build" title="読み込まれている版">html r13</span>
+  <span id="build" title="読み込まれている版">html r14</span>
   <button id="btn-smaller" type="button">A&minus;</button>
   <button id="btn-larger" type="button">A&plus;</button>
 </footer>
@@ -100,6 +144,14 @@
 <input type="file" id="file-input" accept=".epub,application/epub+zip" hidden>
 <input type="file" id="dict-input" accept=".zip,application/zip,application/x-zip-compressed" hidden>
 
-<script type="module" src="js/app.js?v=13"></script>
+<!-- Order matters. The reader's module is deferred, so it runs after
+     parsing and before DOMContentLoaded; shell.js is a classic script and
+     registers its own DOMContentLoaded handler here. That is what puts
+     window.Reader in place before wireReader() looks for it - reverse the two
+     and the reader's actions have nowhere to mount, silently. -->
+<script type="module" src="js/app.js?v=14"></script>
+<script src="../assets/js/i18n.js?v=14"></script>
+<script src="../assets/js/app.js?v=14"></script>
+<script src="../assets/js/shell.js?v=14"></script>
 </body>
 </html>
