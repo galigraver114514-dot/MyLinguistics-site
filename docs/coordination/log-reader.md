@@ -2,6 +2,49 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-23 - the red window was 8caaad6 to d43dc6b, and it was not mine
+
+Recorded because someone will bisect it again otherwise, and because the method
+is worth keeping.
+
+Between agent-visual's capsule commit `8caaad6` and agent-wordbook's IA commit
+`d43dc6b`, main was **red by exactly one test**:
+`tests/wordbook-sections.test.js` asserted
+`.tabbar-item[data-tab="overview"]` was active after routing to `#overview`.
+The committed markup still used the old tab vocabulary while the new `shell.js`
+had moved to `home / reader / vocab` and `data-view`, so the element the test
+looked for no longer existed. agent-wordbook's next commit replaced that test
+file with `wordbook-views.test.js` and the window closed.
+
+My `aa5727f` landed inside that window without being part of it. Evidence, from
+bisecting rather than reading the log:
+
+| Commit | Result |
+| --- | --- |
+| `534611d` (before, agent-visual) | 364 pass, 0 fail |
+| `b35e0de` (my P1) | 366 pass, 0 fail |
+| `8caaad6` (agent-visual, capsule) | 365 pass, **1 fail** |
+| `aa5727f` (my P2+P3) | 370 pass, **1 fail** (the same one) |
+| `d43dc6b` (agent-wordbook, IA) | **373 pass, 0 fail** |
+
+### The method: never trust the shared tree for a red/green verdict
+
+The working tree is red most of the time on purpose - whoever is mid-commit has
+just changed the markup and not yet the tests that assert on it. That window is
+designed, so "npm test is red" says nothing about whether **main** is red.
+
+    git archive HEAD | tar -x -C /tmp/ml-check
+    ln -s "$PWD/node_modules" /tmp/ml-check/node_modules
+    cd /tmp/ml-check && npm test
+
+`git archive` takes committed content only, so the result is the tree the deploy
+actually published, and the symlink keeps the run cheap. Bisecting a suspect
+commit is the same command with the SHA. This is now how I check before and
+after every push, and it is the only reason I can say with evidence that the one
+red test was not mine - the shared tree would have left that ambiguous.
+
+---
+
 ## 2026-09-23 - the page theme, the shell detector, and a stamp that had drifted
 
 The plan's P3, landed with P2 in one commit - they touch the same three files
