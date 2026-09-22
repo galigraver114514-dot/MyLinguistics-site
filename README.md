@@ -75,9 +75,9 @@ fullscreen, with no browser chrome.
   A **Look only** toggle shows every answer and advances without grading.
 - **Passive** is a context-rich digest you only read. It grows a decaying
   familiarity score and never writes into the FSRS schedule.
-- **River** is a field of words flowing in six lanes. Drag to cast the net and
-  the words you catch go into the pool, where they are carded automatically.
-  No grading and no sentences.
+- **River** is a vertical field of words: columns in tategaki, falling from the
+  top. Drag the rod and the first word the hook touches goes into the pool,
+  where it is carded automatically. No grading and no sentences.
 - **Inbox** holds mined candidates. Approve one to author its cards, or ignore
   it to retire it. The same panel captures a word by hand.
 - **Browse** lists the lexicon with recognition and card state.

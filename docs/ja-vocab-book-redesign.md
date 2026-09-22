@@ -106,18 +106,20 @@ pacing layer on top:
 - a brick retires once every card reaches a stability threshold, at which
   point it moves to the overview.
 
-## 5. Word river and net
+## 5. Word river and rod
 
-- Rendered on a `<canvas>`: four to eight lanes scrolling at different speeds,
-  words tiled densely and wrapped seamlessly, driven by a
-  `requestAnimationFrame` loop that never stops.
-- Density target: 40 to 80 readable words on screen; offscreen text caching and
-  a device-pixel-ratio cap keep it at 60fps.
-- **Net**: press and drag to cast. Words inside the net highlight and are pulled
-  toward its centre; releasing opens a catch sheet with *collect* and
-  *release*. Words already in the lexicon are skipped.
-- The one exception to "never stops": `prefers-reduced-motion` slows it to a
-  static grid.
+- Rendered on a `<canvas>` in **tategaki**: words fall from the top in
+  columns, one character under the last, and the columns drift down at
+  different speeds.
+- The column count follows the width - about one column per 46px, between 3
+  and 14 of them - so a wide iPad is densely packed and a phone is not.
+- A word that leaves the bottom returns above its own column's top, so the
+  stream never ends and the spacing inside a column can never close up.
+- **Rod**: press or drag to drop the hook. The first word it touches is hooked,
+  reported, and sent to the pool. One cast, one word; the hook is always lifted,
+  so the same word can be hooked again.
+- The one exception to "never stops": `prefers-reduced-motion` draws a single
+  static frame instead of animating.
 
 ## 6. Decisions locked
 
@@ -180,21 +182,22 @@ to tomorrow, and a brick retires once every card reaches a 21-day stability.
 
 | File | What it is |
 | --- | --- |
-| `src/lexicon/river-field.js` | pure: lanes, tiling, wrap-around, and the net's hit test |
-| `src/lexicon/river-view.js` | canvas drawing, the clock, pointer handling, and a DOM fallback where there is no 2D context |
+| `src/lexicon/river-field.js` | pure: columns, tategaki boxes, wrap-around, the rod's hit test, and a no-overlap guard |
+| `src/lexicon/river-view.js` | canvas drawing (one character per cell), the clock, the rod, and a DOM fallback where there is no 2D context |
 | `src/lexicon/river-pool.js` | the field's food: the lexicon, the captured pool, and a dictionary sample, shuffled |
-| `src/lexicon/entry.js` | the river tab: start and stop, pause, a new course, and the catch sheet |
+| `src/lexicon/entry.js` | the river tab: start and stop, pause, a new course, and the one-word catch |
 
-The field is six lanes alternating direction, each at its own speed, with words
-tiled along them and recycled behind their lane so the stream never ends. The
-view caps the device pixel ratio at 2 and reads its colours from the tokens, so
-the river follows the theme; `prefers-reduced-motion` draws one static frame
-instead of animating.
+The field lays out columns of equal cells, so two words in one column can only
+touch if the layout puts them there and it never does; a test steps the field
+four hundred times and asserts no overlap after every step. The view caps the
+device pixel ratio at 2 and reads its colours from the tokens, so the river
+follows the theme; `prefers-reduced-motion` draws one static frame instead of
+animating.
 
-The net: press and drag catches every word it touches, and releasing opens the
-shell's sheet with *add to the pool* and *release*. A caught word goes through
-`addToPool`, so it is carded mechanically like any other capture, and
-`buildBricks` runs straight after.
+The rod hooks one word per cast and sends it straight through `addToPool`, so it
+is carded mechanically and `buildBricks` runs straight after. Nothing stands
+between the finger and the result; a line under the river says what happened,
+including when the word was already in the pool.
 
 The river's food is three sources: the learner's own lexicon (whose items carry
 a sense, so they keep their schedule), the captured pool (the unknown words the

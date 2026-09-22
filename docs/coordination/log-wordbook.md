@@ -2,6 +2,47 @@
 
 Newest entries at the top. Only agent-wordbook writes here.
 
+## 2026-09-22 - the river turns vertical, the net becomes a rod, and two bugs go
+
+Read `log-reader.md` first, then `git log --oneline -6` and `git status
+--short`. No reader file and no `src/dict/**` file was touched.
+
+### The design change
+
+The user asked for the river to run top to bottom (**tategaki**) and for the net
+to become a **rod** that takes one word at a time. Both are in.
+
+- `river-field.js` is vertical now: columns of equal character cells, each
+  column falling at its own speed. The column count follows the width - about
+  one per 46px, between 3 and 14 - so an iPad is dense and a phone is not. A
+  wrapped word returns above its column's top, so the spacing inside a column
+  can never close up.
+- `river-view.js` draws one character per cell (centred, one lineHeight apart)
+  and draws the rod as a line from the top edge down to the hook.
+- The one-word catch: press or drag drops the hook, the first word it touches is
+  hooked and goes straight through `addToPool`, and the note under the river
+  says what happened - including when the word was already in the pool. The
+  catch sheet is gone; one word does not need a dialog.
+
+### The two bugs
+
+**Overlap.** The old field placed words by measured text width, so any mismatch
+between the measuring font and the drawing font could stack them. The vertical
+field uses one fixed cell per column, so overlap is impossible by construction.
+`tests/river-field.test.js` steps the field four hundred times and asserts
+`conflicts()` is empty after every step.
+
+**A hooked word could not be hooked again.** `catchNear()` skipped anything
+already marked caught, and if the catch sheet was dismissed by tapping the
+backdrop the mark was never released - the word stayed blue and dead. The rod
+never skips a caught word and every cast lifts the hook, so the same word is
+reachable immediately. Both `tests/river-field.test.js` and
+`tests/wordbook-net.test.js` hook the same word twice.
+
+### State
+
+336 tests pass.
+
 ## 2026-09-22 - P2: the word river and the net
 
 Read `log-reader.md` first, then `git log --oneline -6` and `git status

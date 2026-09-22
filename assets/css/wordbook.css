@@ -254,7 +254,9 @@
   position: absolute;
   top: 0;
   left: 0;
-  white-space: nowrap;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  letter-spacing: 0.05em;
   font-size: 22px;
   font-weight: 600;
   color: var(--text);

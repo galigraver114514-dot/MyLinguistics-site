@@ -109,10 +109,9 @@ var FALLBACK = {
   'wb.brick.done': 'Brick {name} done',
   'wb.brick.doneNote': '{n} cards were marked Again.',
   'wb.river.count': '{n} words in the river',
-  'wb.river.catch': 'Caught {n} words',
-  'wb.river.keep': 'Add to the word pool',
-  'wb.river.release': 'Release',
-  'wb.river.kept': '{n} of {total} words added to the pool.'
+  'wb.river.note': 'Drag the rod; the first word it touches lands in the pool.',
+  'wb.river.keptOne': '{word} added to the pool.',
+  'wb.river.hadOne': '{word} is already in the pool.'
 };
 
 function formatDue(ms) {
@@ -738,7 +737,7 @@ async function resetAll() {
  * a word that is already the learner's own keeps its sense and its schedule.
  */
 
-var RIVER = { view: null, pool: [], cursor: 0, loading: false, token: null, paused: false, pending: [], sample: 60, count: 70 };
+var RIVER = { view: null, pool: [], cursor: 0, loading: false, token: null, paused: false, pending: null, sample: 60, count: 70 };
 
 /* The pool: the learner's words, the captured candidates, and a dictionary
  * sample, in one shuffled list. It is refilled in the background before it runs
@@ -804,7 +803,7 @@ async function startRiver() {
   RIVER.pool = pool;
   RIVER.cursor = 0;
   RIVER.paused = false;
-  RIVER.pending = [];
+  RIVER.pending = null;
   RIVER.view = createRiverView(canvas, {
     fallback: el('wbRiverFallback'),
     count: RIVER.count,
@@ -822,7 +821,7 @@ async function startRiver() {
 
 function stopRiver() {
   RIVER.token = null;
-  RIVER.pending = [];
+  RIVER.pending = null;
   if (RIVER.view) {
     RIVER.view.stop();
     RIVER.view.release();
@@ -830,46 +829,31 @@ function stopRiver() {
   }
 }
 
-/* Releasing the net opens the shell's catch sheet. Without the shell it keeps
- * the words rather than silently dropping them. */
-function handleRiverCatch(items) {
-  RIVER.pending = items.map(function (item) { return item.term; });
-  var title = tText('wb.river.catch', { n: RIVER.pending.length });
-  if (window.ML && window.ML.shell && window.ML.shell.openSheet) {
-    window.ML.shell.openSheet({
-      title: title,
-      items: [
-        { label: tText('wb.river.keep'), onClick: function () { collectRiverCatch(); } },
-        { label: tText('wb.river.release'), onClick: function () { releaseRiverCatch(); } }
-      ]
-    });
-  } else {
-    collectRiverCatch();
-  }
+/* One cast, one word. The catch goes straight into the pool and is carded, so
+ * nothing stands between the finger and the result; the note says what
+ * happened, including when the word was already there. */
+function handleRiverCatch(item) {
+  if (!item || !item.term) return;
+  RIVER.pending = item.term;
+  collectRiverCatch();
 }
 
 async function collectRiverCatch() {
-  var terms = RIVER.pending.slice();
-  RIVER.pending = [];
-  var carded = 0;
-  for (var i = 0; i < terms.length; i += 1) {
-    var result = await state.lex.addToPool({ wordKey: terms[i] }, { dictionary: state.dictionary });
-    if (result && result.state === 'carded') carded += 1;
-  }
-  await state.lex.buildBricks();
+  var term = RIVER.pending;
+  RIVER.pending = null;
+  if (!term) return;
+  var result = await state.lex.addToPool({ wordKey: term }, { dictionary: state.dictionary });
+  if (result && result.state === 'carded') await state.lex.buildBricks();
   if (RIVER.view) RIVER.view.release();
   var note = el('wbRiverCatch');
   if (note) {
-    note.textContent = tText('wb.river.kept', { n: carded, total: terms.length });
+    note.textContent = result && result.state === 'carded'
+      ? tText('wb.river.keptOne', { word: term })
+      : tText('wb.river.hadOne', { word: term });
     show(note, true);
   }
   await refresh();
   await renderInbox();
-}
-
-function releaseRiverCatch() {
-  RIVER.pending = [];
-  if (RIVER.view) RIVER.view.release();
 }
 
 function toggleRiver() {

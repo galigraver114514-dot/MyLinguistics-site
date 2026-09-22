@@ -1,13 +1,15 @@
 /* The canvas half of the word river.
  *
  * river-field.js owns the words and their motion; this file owns the pixels,
- * the clock, and the finger. On a device it draws to a 2D canvas. Where there
- * is no 2D context - a headless test - it falls back to absolutely positioned
- * spans, so the same field can still be inspected and poked.
+ * the clock, and the rod. Words are drawn tategaki: one character under the
+ * last. On a device this is a 2D canvas; where there is no 2D context - a
+ * headless test - the same field renders as absolutely positioned spans, so the
+ * rod can still be used and the pool wiring tested.
  */
 import { createField } from './river-field.js';
 
 var FONT_STACK = '-apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
+var RIPPLE_MS = 420;
 
 export function createRiverView(canvas, options) {
   var opts = options || {};
@@ -29,28 +31,25 @@ export function createRiverView(canvas, options) {
     ? window.requestAnimationFrame.bind(window) : null;
   var caf = (!reduced && typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function')
     ? window.cancelAnimationFrame.bind(window) : null;
+  var clock = function () {
+    return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  };
 
   var nodes = [];
   var running = false;
   var frameId = null;
   var last = 0;
-  var net = null;
-
-  function measure(term) {
-    if (ctx) {
-      ctx.font = '600 ' + fontSize + 'px ' + FONT_STACK;
-      var metrics = ctx.measureText(String(term));
-      return { width: Math.ceil(metrics.width) + 2, height: Math.ceil(fontSize * 1.5) };
-    }
-    return { width: Math.ceil(String(term).length * fontSize * 0.98) + 2, height: Math.ceil(fontSize * 1.5) };
-  }
+  var rod = null;
+  var ripple = null;
 
   var field = createField({
-    lanes: opts.lanes,
+    columns: opts.columns,
+    columnWidth: opts.columnWidth || 46,
     count: opts.count,
     baseSpeed: opts.baseSpeed,
     nextWord: opts.nextWord,
-    measure: measure,
+    fontSize: fontSize,
+    lineHeight: opts.lineHeight,
     width: width,
     height: height
   });
@@ -93,24 +92,48 @@ export function createRiverView(canvas, options) {
       syncFallback();
       return;
     }
+    var lineHeight = field.lineHeight();
     ctx.clearRect(0, 0, width, height);
-    ctx.textBaseline = 'top';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.font = '600 ' + fontSize + 'px ' + FONT_STACK;
+
     var items = field.items();
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i];
       ctx.fillStyle = item.caught ? colors.tint : colors.text;
-      ctx.globalAlpha = item.caught ? 1 : 0.8;
-      ctx.fillText(item.term, item.x, item.y);
+      ctx.globalAlpha = item.caught ? 1 : 0.82;
+      var cx = item.x + item.width / 2;
+      for (var c = 0; c < item.term.length; c += 1) {
+        ctx.fillText(item.term.charAt(c), cx, item.y + c * lineHeight + lineHeight / 2);
+      }
     }
     ctx.globalAlpha = 1;
-    if (net) {
+
+    var time = clock();
+    if (ripple && ripple.until > time) {
+      var progress = 1 - (ripple.until - time) / RIPPLE_MS;
       ctx.save();
       ctx.strokeStyle = colors.tint;
+      ctx.globalAlpha = Math.max(0, 1 - progress);
       ctx.lineWidth = 2;
-      if (typeof ctx.setLineDash === 'function') ctx.setLineDash([6, 6]);
       ctx.beginPath();
-      ctx.arc(net.x, net.y, net.radius, 0, Math.PI * 2);
+      ctx.arc(ripple.x, ripple.y, 8 + progress * 30, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (rod) {
+      ctx.save();
+      ctx.strokeStyle = colors.tint;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(rod.x, 0);
+      ctx.lineTo(rod.x, rod.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(rod.x, rod.y, 5, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -126,7 +149,7 @@ export function createRiverView(canvas, options) {
     }
     if (ctx && typeof ctx.setTransform === 'function') ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     field.resize(width, height);
-    field.fill(opts.count || 70);
+    field.fill(opts.count || 60);
     draw();
   }
 
@@ -159,31 +182,40 @@ export function createRiverView(canvas, options) {
     return { x: (event.clientX || 0) - (rect.left || 0), y: (event.clientY || 0) - (rect.top || 0) };
   }
 
-  function onDown(event) {
-    var point = pointOf(event);
-    net = { x: point.x, y: point.y, radius: opts.netRadius || 64 };
-    field.catchNear(point.x, point.y, net.radius);
+  /* One cast, one word: the rod is dropped at the pointer and hooks the first
+   * word it touches. The hook is always lifted, whether it caught or not, so
+   * the same word is reachable again next cast. */
+  function castAt(point) {
+    if (!point) return false;
+    rod = { x: point.x, y: point.y };
+    var caught = field.catchAt(point.x, point.y);
+    if (!caught) {
+      draw();
+      return false;
+    }
+    rod = null;
+    ripple = { x: point.x, y: point.y, until: clock() + RIPPLE_MS };
     draw();
+    if (typeof opts.onCatch === 'function') opts.onCatch(caught);
+    return true;
+  }
+
+  function onDown(event) {
+    castAt(pointOf(event));
     if (canvas.setPointerCapture && event.pointerId != null) {
       try { canvas.setPointerCapture(event.pointerId); } catch (err) { /* ignore */ }
     }
   }
 
   function onMove(event) {
-    if (!net) return;
-    var point = pointOf(event);
-    net.x = point.x;
-    net.y = point.y;
-    field.catchNear(point.x, point.y, net.radius);
-    draw();
+    if (!rod) return;
+    castAt(pointOf(event));
   }
 
   function onUp() {
-    if (!net) return;
-    net = null;
-    var caught = field.caught();
+    if (!rod) return;
+    rod = null;
     draw();
-    if (caught.length && typeof opts.onCatch === 'function') opts.onCatch(caught.slice());
   }
 
   if (canvas && typeof canvas.addEventListener === 'function') {
@@ -200,7 +232,8 @@ export function createRiverView(canvas, options) {
     stop: stop,
     draw: draw,
     release: function () {
-      net = null;
+      rod = null;
+      ripple = null;
       field.releaseCaught();
       draw();
     },
