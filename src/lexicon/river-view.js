@@ -1,19 +1,29 @@
 /* The canvas half of the word river.
  *
  * river-field.js owns the words and their motion; this file owns the pixels,
- * the clock, and the rod. Words are drawn tategaki: one character under the
- * last. On a device this is a 2D canvas; where there is no 2D context - a
- * headless test - the same field renders as absolutely positioned spans, so the
- * rod can still be used and the pool wiring tested.
+ * the clock, and the gesture. Every word is drawn as a chip - a rounded rect
+ * with a border and a surface inside it, the character stack running down the
+ * middle - which is what the board draws and what makes a column read as a
+ * stream of words rather than as loose text.
+ *
+ * The gesture is press-and-hold, then drag: the word lifts out of the water and
+ * follows the finger, and letting go over the bucket puts it there. There is no
+ * rod. On a device this is a 2D canvas; where there is no 2D context - a
+ * headless test - the same field renders as absolutely positioned spans so the
+ * gesture can still be made and the pool wiring tested.
  */
 import { createField } from './river-field.js';
 
 var FONT_STACK = '-apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
-var RIPPLE_MS = 420;
+var LONG_PRESS_MS = 300;
+var LIFT_MS = 150;
+var CHIP_PAD = 4;
+var CHIP_RADIUS = 9;
 
 export function createRiverView(canvas, options) {
   var opts = options || {};
   var fallback = opts.fallback || null;
+  var dropEl = opts.dropTarget || null;
   var ctx = null;
   try {
     ctx = canvas && typeof canvas.getContext === 'function' ? canvas.getContext('2d') : null;
@@ -21,7 +31,7 @@ export function createRiverView(canvas, options) {
     ctx = null;
   }
 
-  var fontSize = opts.fontSize || 22;
+  var fontSize = opts.fontSize || 24;
   var width = opts.width || 720;
   var height = opts.height || 440;
   var dpr = Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1, 2);
@@ -36,20 +46,17 @@ export function createRiverView(canvas, options) {
   };
 
   var nodes = [];
+  var heldNode = null;
   var running = false;
   var frameId = null;
   var last = 0;
-  /* The rod is drawn from an animated position, not from the pointer's: a rod
-   * that snaps to the finger reads as a cursor, and the whole gesture is meant
-   * to be a rod going into water. `rodTarget` is where the finger is, `rod` is
-   * where the rod is, and the gap between them is eased away every frame. */
-  var rod = null;
-  var rodTarget = null;
-  var rodUp = null;
-  var hook = 0;
-  var ripple = null;
-  var ROD_EASE = 0.28;
-  var ROD_UP_MS = 220;
+  /* A press that has not matured yet, the word that has been picked up, and the
+   * slot it came from - which is where it goes back to if it is dropped
+   * anywhere but the bucket. */
+  var press = null;
+  var pressTimer = null;
+  var held = null;
+  var overDrop = false;
 
   var field = createField({
     columns: opts.columns,
@@ -63,26 +70,81 @@ export function createRiverView(canvas, options) {
     height: height
   });
 
-  /* The two colours the canvas paints with, read once and kept. This used to
-   * call getComputedStyle on every frame - two forced style recalcs sixty times
-   * a second, which is the kind of thing an iPad feels and a desktop does not.
+  /* The colours the canvas paints with, read once and kept. This used to call
+   * getComputedStyle on every frame - two forced style recalcs sixty times a
+   * second, which is the kind of thing an iPad feels and a desktop does not.
    * The theme is the only thing that changes them, so the theme is what this
    * watches. */
   var colors = null;
   function palette() {
     if (colors) return colors;
-    var text = '#000000';
-    var tint = '#007aff';
+    var out = {
+      text: '#000000', tint: '#007aff', ink: '#ffffff',
+      surface: '#ffffff', border: 'rgba(0,0,0,0.12)'
+    };
     try {
       var styles = getComputedStyle(document.documentElement);
-      text = (styles.getPropertyValue('--text') || text).trim() || text;
-      tint = (styles.getPropertyValue('--tint') || tint).trim() || tint;
+      var read = function (name, fallbackValue) {
+        return (styles.getPropertyValue(name) || '').trim() || fallbackValue;
+      };
+      out.text = read('--text', out.text);
+      out.tint = read('--tint', out.tint);
+      out.ink = read('--tint-contrast', out.ink);
+      out.surface = read('--surface', out.surface);
+      out.border = read('--border', out.border);
     } catch (err) { /* keep the defaults */ }
-    colors = { text: text, tint: tint };
+    colors = out;
     return colors;
   }
   if (typeof MutationObserver === 'function' && typeof document !== 'undefined' && document.documentElement) {
     new MutationObserver(function () { colors = null; }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  }
+
+  function roundRect(x, y, w, h, r) {
+    var rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  /* One chip, at an offset from the word's own box (which is what the field
+   * moves and hit-tests against). */
+  function chip(item, dx, dy, scale, raised) {
+    var colorsHere = palette();
+    var lineHeight = field.lineHeight();
+    var w = (item.width + CHIP_PAD * 2) * scale;
+    var h = (item.height + CHIP_PAD * 2) * scale;
+    var cx = item.x + item.width / 2 + dx;
+    var cy = item.y + item.height / 2 + dy;
+    var x = cx - w / 2;
+    var y = cy - h / 2;
+    ctx.save();
+    if (raised) {
+      ctx.shadowColor = 'rgba(0,0,0,0.22)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 6;
+    }
+    roundRect(x, y, w, h, CHIP_RADIUS * scale);
+    ctx.fillStyle = raised ? colorsHere.tint : colorsHere.surface;
+    ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = raised ? colorsHere.tint : colorsHere.border;
+    ctx.stroke();
+    ctx.fillStyle = raised ? colorsHere.ink : colorsHere.text;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '600 ' + (fontSize * scale) + 'px ' + FONT_STACK;
+    for (var c = 0; c < item.term.length; c += 1) {
+      ctx.fillText(item.term.charAt(c), cx - 1, y + CHIP_PAD * scale + c * lineHeight * scale + (lineHeight * scale) / 2);
+    }
+    ctx.restore();
   }
 
   function syncFallback() {
@@ -102,122 +164,73 @@ export function createRiverView(canvas, options) {
       if (!node) return;
       if (node.textContent !== item.term) node.textContent = item.term;
       node.style.transform = 'translate(' + Math.round(item.x) + 'px,' + Math.round(item.y) + 'px)';
-      node.classList.toggle('is-caught', !!item.caught);
     });
+    /* The held word has no slot, so the fallback gives it a node of its own. */
+    if (held && !heldNode) {
+      heldNode = document.createElement('span');
+      heldNode.className = 'wb-river-word is-held';
+      fallback.appendChild(heldNode);
+    }
+    if (!held && heldNode) {
+      heldNode.remove();
+      heldNode = null;
+    }
+    if (held && heldNode) {
+      heldNode.textContent = held.term;
+      heldNode.style.transform = 'translate(' + Math.round(held.x - 14) + 'px,' + Math.round(held.y - 14) + 'px)';
+    }
   }
 
   function draw() {
-    var colors = palette();
     if (!ctx) {
       syncFallback();
       return;
     }
-    var lineHeight = field.lineHeight();
+    var colorsHere = palette();
     ctx.clearRect(0, 0, width, height);
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = '600 ' + fontSize + 'px ' + FONT_STACK;
 
     var items = field.items();
     var nowMs = clock();
     var bornMs = field.bornMs || 260;
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i];
-      /* A word that has just been placed at the top fades in: the river is
-       * endless, so a word appearing from nothing is the one thing that gives
-       * away that it is a loop. */
+      /* A word that has been placed at the top fades in: the river is endless,
+       * so a word appearing from nothing is the one thing that gives away that
+       * it is a loop. */
       var age = item.born ? (nowMs - item.born) / bornMs : 1;
       var appear = age >= 1 ? 1 : Math.max(0, age);
-      ctx.fillStyle = item.caught ? colors.tint : colors.text;
-      ctx.globalAlpha = (item.caught ? 1 : 0.82) * appear;
-      var cx = item.x + item.width / 2;
-      var cy = item.y;
-      for (var c = 0; c < item.term.length; c += 1) {
-        var ch = item.term.charAt(c);
-        if (appear < 1) {
-          ctx.save();
-          ctx.translate(cx, cy + c * lineHeight + lineHeight / 2);
-          ctx.scale(1, 0.86 + 0.14 * appear);
-          ctx.fillText(ch, 0, 0);
-          ctx.restore();
-        } else {
-          ctx.fillText(ch, cx, cy + c * lineHeight + lineHeight / 2);
-        }
+      var pressScale = press && press.item === item ? 1 + 0.06 * press.amount : 1;
+      ctx.globalAlpha = appear;
+      chip(item, 0, 0, pressScale, false);
+      if (press && press.item === item && press.amount > 0) {
+        /* The word swells while it is being held down, so the long press says
+         * something before it fires - otherwise the first feedback a finger
+         * gets is the word already in the air. */
+        ctx.save();
+        ctx.globalAlpha = appear * (1 - press.amount) * 0.5;
+        ctx.strokeStyle = colorsHere.tint;
+        ctx.lineWidth = 2;
+        roundRect(item.x - CHIP_PAD - 3, item.y - CHIP_PAD - 3,
+          item.width + CHIP_PAD * 2 + 6, item.height + CHIP_PAD * 2 + 6, CHIP_RADIUS + 3);
+        ctx.stroke();
+        ctx.restore();
       }
     }
     ctx.globalAlpha = 1;
 
-    var time = clock();
-    if (hook > time) {
-      var k = 1 - (hook - time) / 180;
-      ctx.save();
-      ctx.strokeStyle = colors.tint;
-      ctx.globalAlpha = Math.max(0, 0.9 - k);
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      var tipAt = tip();
-      ctx.arc(tipAt.x, tipAt.y, 5 + k * 12, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-    if (ripple && ripple.until > time) {
-      var progress = 1 - (ripple.until - time) / RIPPLE_MS;
-      ctx.save();
-      ctx.strokeStyle = colors.tint;
-      ctx.globalAlpha = Math.max(0, 1 - progress);
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(ripple.x, ripple.y, 8 + progress * 30, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    var shown = rod || rodUp;
-    if (shown) {
-      ctx.save();
-      ctx.strokeStyle = colors.tint;
-      ctx.globalAlpha = 0.75;
-      ctx.lineWidth = 2;
-      /* The line bends as it comes down: a straight stick reads as a cursor. */
-      ctx.beginPath();
-      ctx.moveTo(shown.x, 0);
-      ctx.quadraticCurveTo(shown.x + 14, shown.y * 0.55, shown.x, shown.y);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(shown.x, shown.y, 5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+    if (held) {
+      var lifted = {
+        term: held.term,
+        height: held.height,
+        width: held.width,
+        x: held.x - held.width / 2,
+        y: held.y - held.height / 2
+      };
+      chip(lifted, 0, 0, 1 + 0.06 * held.lift, true);
     }
   }
 
-  function tip() {
-    var shown = rod || rodUp;
-    if (shown) return { x: shown.x, y: shown.y };
-    return rodTarget ? { x: rodTarget.x, y: rodTarget.y } : { x: 0, y: 0 };
-  }
-
-  /* The rod lags the finger by design (see ROD_EASE), and comes back out of the
-   * water when the gesture ends instead of disappearing. */
-  function easeRod(dt) {
-    if (rod && rodTarget) {
-      var k = 1 - Math.pow(1 - ROD_EASE, Math.max(dt, 0.001) * 60);
-      rod.x += (rodTarget.x - rod.x) * k;
-      rod.y += (rodTarget.y - rod.y) * k;
-    }
-    if (rodUp) {
-      var left = rodUp.until - clock();
-      if (left <= 0) {
-        rodUp = null;
-      } else {
-        var t = 1 - left / ROD_UP_MS;
-        var eased = 1 - Math.pow(1 - t, 2);
-        rodUp.y = rodUp.fromY + (-24 - rodUp.fromY) * eased;
-        rodUp.x = rodUp.fromX;
-      }
-    }
-  }
-
-  function animating() { return running || !!rod || !!rodUp; }
+  function animating() { return running || !!press || !!held; }
 
   function resize() {
     var rect = canvas && typeof canvas.getBoundingClientRect === 'function' ? canvas.getBoundingClientRect() : null;
@@ -233,18 +246,20 @@ export function createRiverView(canvas, options) {
     /* Same box and words still in the water: nothing to do but paint. The view
      * is reused when 川 is reopened, and refilling on every arrival is what
      * emptied the river for a moment and refetched the pool for nothing. */
-    if (field.resize(width, height) || !field.items().length) field.fill(opts.count || 60);
+    if (field.resize(width, height) || !field.items().length) {
+      dropHeld(false);
+      field.fill(opts.count || 60);
+    }
     draw();
   }
 
-  /* One loop for the words and the rod. The words only move while the river is
-   * running, but the rod has to keep animating when it is not - pausing the
-   * stream should not freeze the thing the finger is holding. */
+  /* One loop for the words, the press and the held word. */
   function advance(ts) {
     var dt = last ? Math.min(0.05, (ts - last) / 1000) : 0;
     last = ts;
     if (running) field.step(dt);
-    easeRod(dt);
+    if (press) press.amount = Math.min(1, (clock() - press.at) / LONG_PRESS_MS);
+    if (held && held.lift < 1) held.lift = Math.min(1, held.lift + dt * (1000 / LIFT_MS));
     draw();
     frameId = animating() && raf ? raf(advance) : null;
   }
@@ -274,52 +289,104 @@ export function createRiverView(canvas, options) {
     return { x: (event.clientX || 0) - (rect.left || 0), y: (event.clientY || 0) - (rect.top || 0) };
   }
 
-  /* One cast, one word: the rod is dropped at the pointer and hooks the first
-   * word it touches. The hook is always lifted, whether it caught or not, so
-   * the same word is reachable again next cast. */
-  function castAt(point) {
-    if (!point) return false;
-    rodTarget = { x: point.x, y: point.y };
-    var caught = field.catchAt(point.x, point.y);
-    if (!caught) return false;
-    hook = clock() + 180;
-    ripple = { x: point.x, y: point.y, until: clock() + RIPPLE_MS };
-    if (typeof opts.onCatch === 'function') opts.onCatch(caught);
+  function overDropZone(clientX, clientY) {
+    if (!dropEl || typeof dropEl.getBoundingClientRect !== 'function') return false;
+    var r = dropEl.getBoundingClientRect();
+    return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+  }
+
+  function markDropZone(on) {
+    if (on === overDrop) return;
+    overDrop = on;
+    if (dropEl && dropEl.classList) dropEl.classList.toggle('is-over', on);
+  }
+
+  /* Picking a word up takes it out of its column and puts another one in its
+   * place on the same frame: the slot never stays empty, and the column keeps
+   * behaving like a stream instead of a hole. */
+  function lift() {
+    pressTimer = null;
+    var item = press && press.item;
+    if (!item || item.term !== press.term) { press = null; return false; }
+    held = {
+      term: item.term,
+      reading: item.reading || '',
+      width: item.width,
+      height: item.height,
+      x: press.x,
+      y: press.y,
+      lift: 0,
+      slot: item
+    };
+    field.replaceAt(item);
+    press = null;
+    kick();
     return true;
   }
 
-  /* The rod goes in from above the field rather than appearing under the
-   * finger: a 24px drop is enough for the gesture to read as lowering a rod
-   * into water, and it is the first thing the hand sees after a tap. */
+  function dropHeld(landedInBucket) {
+    if (!held) return null;
+    var taken = { term: held.term, reading: held.reading };
+    if (!landedInBucket && held.slot) {
+      /* Let go anywhere but the bucket and the word goes back where it came
+       * from - it is the same river, and nothing was decided. */
+      field.replaceAt(held.slot, { term: taken.term, reading: taken.reading });
+    }
+    held = null;
+    markDropZone(false);
+    kick();
+    if (!raf) draw();
+    return taken;
+  }
+
+  /* The press matures on a timer rather than on a frame: a page without
+   * requestAnimationFrame still has to be able to pick a word up, which is
+   * exactly the situation in a headless test. The frames only paint it. */
   function onDown(event) {
     var point = pointOf(event);
-    rod = { x: point.x, y: -24 };
-    rodTarget = { x: point.x, y: point.y };
-    rodUp = null;
-    castAt(point);
-    kick();
-    if (canvas.setPointerCapture && event.pointerId != null) {
-      try { canvas.setPointerCapture(event.pointerId); } catch (err) { /* ignore */ }
+    var item = field.itemAt(point.x, point.y);
+    clearTimeout(pressTimer);
+    press = item
+      ? { item: item, term: item.term, x: point.x, y: point.y, at: clock(), amount: 0 }
+      : null;
+    if (press) {
+      pressTimer = setTimeout(lift, LONG_PRESS_MS);
+      kick();
+      if (canvas.setPointerCapture && event.pointerId != null) {
+        try { canvas.setPointerCapture(event.pointerId); } catch (err) { /* ignore */ }
+      }
     }
   }
 
   function onMove(event) {
-    if (!rod) return;
-    castAt(pointOf(event));
+    var point = pointOf(event);
+    if (held) {
+      held.x = point.x;
+      held.y = point.y;
+      markDropZone(overDropZone(event.clientX, event.clientY));
+      kick();
+      return;
+    }
+    if (!press) return;
+    /* A finger that travels before the press matures was not holding anything
+     * still, and the press is abandoned. */
+    if (Math.abs(point.x - press.x) > 12 || Math.abs(point.y - press.y) > 12) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+      press = null;
+    }
   }
 
-  function onUp() {
-    if (!rod) return;
-    lift();
-  }
-
-  function lift() {
-    if (rod) rodUp = { x: rod.x, y: rod.y, fromX: rod.x, fromY: rod.y, until: clock() + ROD_UP_MS };
-    rod = null;
-    rodTarget = null;
-    field.releaseCaught();
-    kick();
-    if (!raf) draw();
+  function onUp(event) {
+    if (held) {
+      var inBucket = overDropZone(event.clientX, event.clientY);
+      var taken = dropHeld(inBucket);
+      if (inBucket && taken && typeof opts.onDrop === 'function') opts.onDrop(taken);
+      return;
+    }
+    clearTimeout(pressTimer);
+    pressTimer = null;
+    press = null;
   }
 
   if (canvas && typeof canvas.addEventListener === 'function') {
@@ -335,27 +402,24 @@ export function createRiverView(canvas, options) {
     start: start,
     stop: stop,
     draw: draw,
+    /* Held only while a word is in the air, so a destination change drops it. */
     release: function () {
-      /* The catch is done: lift the rod out, and let the ripple finish. The
-       * rod used to vanish on the same frame the word was hooked, which is the
-       * one moment the gesture most wants to be animated. */
-      rodUp = rod
-        ? { x: rod.x, y: rod.y, fromX: rod.x, fromY: rod.y, until: clock() + ROD_UP_MS }
-        : rodUp;
-      rod = null;
-      rodTarget = null;
-      field.releaseCaught();
-      kick();
-      if (!raf) draw();
+      dropHeld(false);
+      clearTimeout(pressTimer);
+      pressTimer = null;
+      press = null;
+      draw();
     },
     refill: function (count) {
       var wanted = count || opts.count || field.items().length || 60;
+      dropHeld(false);
       field.fill(wanted);
       field.coverTop();
       draw();
       return field.items().length;
     },
-    tip: tip,
+    /* What the finger is holding, for the interaction check. */
+    holding: function () { return held ? { term: held.term, x: held.x, y: held.y } : null; },
     hasCanvas: !!ctx
   };
 }

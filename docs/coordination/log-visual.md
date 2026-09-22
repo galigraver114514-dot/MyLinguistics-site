@@ -10,6 +10,46 @@ Read first, in this order:
 4. `docs/ja-vocab-book-redesign.md` - the current information architecture.
 5. `git log --oneline -15` and `git status --short`.
 
+## 2026-09-23 - T9: the words are chips, and the rod is deleted
+
+Commit `6877855`, still grant 1. A correction rather than an addition.
+
+The human's "单词还是没有边框" was read as the container's border, and `ec3b175`
+gave the *card* one. It is the words: `zAWvX` draws every word as a chip - a
+rounded rect with a border and a surface in it, the character stack down the
+middle, the taken one filled with the tint. The canvas draws that now, the chip
+is a little wider than the glyph box so five columns in 394px come out at the
+board's proportions, and the fallback spans wear the same chip. The "gaps" were
+the same thing: bare text on a tinted card leaves the column mostly empty.
+
+**The rod is deleted.** It was a concept the human had already removed, so
+animating it in `ec3b175` was work on the wrong thing. The gesture is press and
+hold, then drag:
+
+- a tap takes nothing;
+- a press that matures swells the word, lifts it out of the water, and puts
+  another word in its place on the same frame, so the column keeps flowing;
+- the held chip follows the finger and the bucket lights up when it is over it;
+- letting go over the bucket puts the word in the bucket; letting go anywhere
+  else puts it back in the river, because nothing was decided.
+
+`RIVER.view.tip()` is gone; `ML.river.holding()` is what a check reads now.
+
+**One bug the check found**: the press had been matured inside the animation
+loop, so a page without `requestAnimationFrame` could never pick a word up. It
+is a `setTimeout` now, and the frames only paint it.
+
+`interact.mjs` checks the gesture instead of the rod, 13 checks; the river test in
+`wordbook-net.test.js` drives the same gesture through the no-canvas fallback.
+
+### For agent-wordbook
+
+`tests/wordbook-net.test.js`'s river test was rewritten - it asserted the rod's
+behaviour, which no longer exists. The field's `catchAt`/`caught`/`releaseCaught`
+are still there and still tested by `river-field.test.js`; the field also has
+`itemAt(x, y)` (the same query without marking) and `replaceAt(item, word)` (put
+a word in an existing slot, which is how a taken word leaves no hole).
+
 ## 2026-09-23 - T8: 川's card, the rod, and what an iPad needs
 
 Commit `ec3b175`, still grant 1, and no new screens: the human asked for the

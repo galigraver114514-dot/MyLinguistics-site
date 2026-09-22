@@ -13,7 +13,7 @@ export const DEFAULT_COLUMNS = 6;
 /* The board's river is a dense stream, not a ladder: words sit close enough
  * that a column reads as one flow of text. 18px of gap between words of
  * different lengths left holes the eye reads as the stream running out. */
-export const DEFAULT_GAP = 8;
+export const DEFAULT_GAP = 12;
 export const DEFAULT_FONT = 24;
 /* How long a word takes to arrive after it is placed at the top. The view
  * draws it fading in, which is what makes a recycle read as the river
@@ -48,7 +48,10 @@ export function createField(options) {
     columns = [];
     var count = columnCountFor();
     var slot = width / count;
-    var cell = Math.max(12, Math.min(slot - 6, fontSize * 1.4));
+    /* The chip is the word's box plus its padding, so the box is a little
+     * narrower than the column: 5 columns in 394px comes out at the board's
+     * own proportions - a 46px chip on a 79px pitch. */
+    var cell = Math.max(12, Math.min(slot - 14, fontSize * 1.3));
     for (var i = 0; i < count; i += 1) {
       var speed = (opts.baseSpeed || 34) * (0.72 + 0.16 * (i % 4)) * (0.9 + random() * 0.2);
       columns.push({ index: i, x: slot * (i + 0.5) - cell / 2, cell: cell, speed: speed });
@@ -184,6 +187,35 @@ export function createField(options) {
     }
   }
 
+  /* Put a different word in a slot that already exists, keeping where it is.
+   * A taken word leaves no hole in its column: another word is already on its
+   * way down that slot, which is what an endless river should do. */
+  function replaceAt(item, word) {
+    if (!item) return null;
+    var next = word || nextWord();
+    if (next && next.term) {
+      item.term = String(next.term);
+      item.reading = next.reading || '';
+      item.height = heightOf(item.term);
+      item.born = now();
+    }
+    return item;
+  }
+
+  /* Which word is under a point, without marking anything: the view asks, the
+   * field answers. `catchAt` is the same query from the rod's days and still
+   * marks the word it finds. */
+  function itemAt(x, y) {
+    var found = null;
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      if (x < item.x || x > item.x + item.width) continue;
+      if (y < item.y || y > item.y + item.height) continue;
+      if (!found || item.y > found.y) found = item;
+    }
+    return found;
+  }
+
   function catchAt(x, y) {
     var found = null;
     for (var i = 0; i < items.length; i += 1) {
@@ -221,6 +253,8 @@ export function createField(options) {
     items: function () { return items; },
     columns: function () { return columns.slice(); },
     catchAt: catchAt,
+    itemAt: itemAt,
+    replaceAt: replaceAt,
     caught: function () { return items.filter(function (item) { return item.caught; }); },
     releaseCaught: function () { clearCaught(); return items.length; },
     conflicts: conflicts,

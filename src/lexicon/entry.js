@@ -154,7 +154,7 @@ var FALLBACK = {
   'wb.brick.done': 'Brick {name} done',
   'wb.brick.doneNote': '{n} cards were marked Again.',
   'wb.river.count': '{n} words in the river',
-  'wb.river.note': 'Drag the rod; the first word it touches lands in the pool.',
+  'wb.river.note': 'Press and hold a word, then drag it into the bucket.',
   'wb.river.keptOne': '{word} added to the pool.',
   'wb.river.hadOne': '{word} is already in the pool.'
 };
@@ -948,7 +948,8 @@ async function startRiver() {
      * width, so this also gives a phone three or four lanes rather than eight. */
     columnWidth: 78,
     nextWord: nextRiverWord,
-    onCatch: handleRiverCatch
+    dropTarget: el('wbBucketSurface'),
+    onDrop: handleRiverDrop
   });
   RIVER.view.resize();
   RIVER.view.start();
@@ -965,7 +966,7 @@ async function startRiver() {
       view: RIVER.view,
       pool: function () { return RIVER.pool; },
       bucket: function () { return RIVER.bucket.slice(); },
-      tip: function () { return RIVER.view ? RIVER.view.tip() : null; },
+      holding: function () { return RIVER.view ? RIVER.view.holding() : null; },
       refill: function () { return RIVER.view ? RIVER.view.refill(RIVER.count) : 0; },
       catch: function (term, reading) { return bucketAdd(term, reading); },
       toPool: bucketToPool,
@@ -1001,15 +1002,14 @@ async function reloadRiver() {
   }
 }
 
-/* One cast, one word - and the word lands in the bucket, not in the pool. The
- * bucket is the stage the cycle diagram draws between 川 and 池 and it is the
- * one place in the flow where the learner, not the engine, decides: nothing has
- * been carded yet, so 取消 can still put the word back in the river. */
-function handleRiverCatch(item) {
-  if (!item || !item.term) return;
-  RIVER.pending = item.term;
-  bucketAdd(item.term, item.reading);
-  if (RIVER.view) RIVER.view.release();
+/* Dropping a held word on the bucket puts it in the bucket - not in the pool.
+ * The bucket is the stage the cycle diagram draws between 川 and 池 and it is
+ * the one place in the flow where the learner, not the engine, decides: nothing
+ * has been carded yet, so 取消 can still put the word back in the river. */
+function handleRiverDrop(taken) {
+  if (!taken || !taken.term) return;
+  RIVER.pending = taken.term;
+  bucketAdd(taken.term, taken.reading);
 }
 
 function bucketIndexOf(term) {

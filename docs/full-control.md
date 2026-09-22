@@ -152,6 +152,31 @@ thrown. It earned its place immediately - a `transform` on the view (even one
 ending at `none`) makes it a containing block, and the pool's two fixed sheets
 moved 22px right and 74px down. The view fade is opacity only now.
 
+### Continued a third time: the words are chips, and the rod is gone
+
+Commit `6877855`, still inside grant 1.
+
+**A correction to read, not just a change.** The human said "单词还是没有边框".
+That was read as the container's border, and the fix gave the *card* one. It is
+the words: `zAWvX` draws every word as a chip - a rounded rect with a border and
+a surface in it, the character stack down the middle, the taken one filled with
+the tint and written in white. The canvas draws that now, and the fallback spans
+wear the same chip. The "gaps" were the same thing: bare text on a tinted card
+leaves the column mostly empty, and chips 4px apart read as a stream.
+
+**The rod is deleted, not improved.** It was a concept the human had already
+removed, so animating it was work on the wrong thing. The gesture is press and
+hold, then drag, and the word itself is what the finger carries: a tap takes
+nothing, a maturing press swells the word, lifts it out of the water and puts
+another word in its place on the same frame (the column keeps flowing), the held
+chip follows the finger, the bucket lights up under it, and letting go there puts
+the word in the bucket. Let go anywhere else and it goes back into the river.
+
+`interact.mjs` checks the gesture now instead of the rod (13 checks), and
+`wordbook-net.test.js` drives it through the fallback. One thing that check
+found: the press had been matured inside the animation loop, so a page without
+`requestAnimationFrame` could never pick a word up - it is a timer now.
+
 ### Deliberately left alone
 
 - **The bucket's chips are buttons, not drag targets.** The board's lede says
@@ -197,6 +222,7 @@ sheets and the drill only exist once something has been caught and packed.
 
 Entry point: commits `795b88b` (the bucket, the geometry, 海), `9ad10e9`
 (復習 and ブリック総覧), `71dcea5` (the 辞書 column and three bugs), `638c2f6`
-(the 辞書 landing and two more) and `ec3b175` (川's card, the rod, iOS, and two
-performance bugs). Tests: 376/376. Board rules: 0. Routes: 16/16.
-Interaction checks: `node designs/verify/interact.mjs`, 12/12.
+(the 辞書 landing and two more), `ec3b175` (川's card, iOS, and two performance
+bugs) and `6877855` (the words as chips, and the rod deleted). Tests: 376/376.
+Board rules: 0. Routes: 16/16. Interaction checks:
+`node designs/verify/interact.mjs`, 13/13.
