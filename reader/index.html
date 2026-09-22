@@ -8,6 +8,13 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Reader">
 <title>Reader - MyLinguistics</title>
+<!-- The site's design tokens, before the reader's own sheet so the reader wins
+     where the two define the same name. These are pure custom properties on
+     :root, no element styling, so adding them changes only what the reader
+     chooses to read from them - and it chooses --tint for the progress rail's
+     fill, which was undefined on this page until now: the fill's background was
+     an invalid declaration, so the rail drew its track and nothing else. -->
+<link rel="stylesheet" href="../assets/css/tokens.css?v=13">
 <link rel="stylesheet" href="reader.css?v=13">
 </head>
 <body>

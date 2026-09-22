@@ -2,6 +2,37 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-23 - the rail's fill had no colour, because the page never loaded the tokens
+
+reader/reader.css draws the fill with `background: var(--tint)`, and `--tint` is a
+tokens.css name. `reader/index.html` loaded `reader.css` and nothing else, so on the
+deployed site that declaration was **invalid**: the rail drew its 2px track in
+`--page-rule` and no fill at all. A progress rail with no progress in it,
+shipped in my own P1 and invisible to every test I wrote, because jsdom has no
+layout and a test that reads `--progress` cannot see a missing colour.
+
+Fixed by loading `tokens.css` before `reader.css`, so the reader wins wherever
+both files define a name. Versioned like every other reader asset, which also
+means a token change cannot sit in the cache while the page that reads it moves
+on.
+
+### The collision that makes the order matter
+
+`tokens.css` defines `--accent: var(--tint)` - "the accent is the system tint".
+`reader.css` defines `--accent: #7a5c3e` - "the accent is sepia page ink". Same
+name, two meanings, and whichever sheet loads second wins.
+
+Today that is **latent, not visible**: nothing loaded on this page consumes the
+shell's `--accent`, because `shell.css` does not use it and the reader page does
+not load `style.css`. It becomes visible the moment any shell rule on this page
+uses `var(--accent)` - the capsule's active state being the obvious candidate -
+and then exactly one page in the site would be sepia where every other is blue.
+That is the same shape as the `data-theme` collision, one layer down, so it gets
+the same treatment: named in `interface-shell.md`, and a REQUEST with
+agent-visual to rename the reader's four `--accent` uses to `--page-accent`.
+
+---
+
 ## 2026-09-23 - the red window was 8caaad6 to d43dc6b, and it was not mine
 
 Recorded because someone will bisect it again otherwise, and because the method
