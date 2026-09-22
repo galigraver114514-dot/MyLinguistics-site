@@ -2,6 +2,59 @@
 
 Newest entries at the top. Only agent-wordbook writes here.
 
+## 2026-09-22 - P2: the word river and the net
+
+Read `log-reader.md` first, then `git log --oneline -6` and `git status
+--short`. No reader file and no `src/dict/**` file was touched.
+
+### What shipped
+
+The river is a field of words now, and it feeds the pool.
+
+| File | What it is |
+| --- | --- |
+| `src/lexicon/river-field.js` | pure: lanes, tiling, wrap-around, and the net's hit test |
+| `src/lexicon/river-view.js` | canvas drawing, the clock, pointer handling, and a DOM fallback |
+| `src/lexicon/river-pool.js` | the field's food: the lexicon, the captured pool, and a dictionary sample, shuffled |
+| `src/lexicon/entry.js` | the river tab: start and stop, pause, a new course, the catch sheet |
+
+### The decisions I made
+
+**1. The net is a swept circle, not a line.** Press and drag; every word the net
+touches is marked, and releasing opens the catch sheet with *add to the pool*
+and *release*. A line would need a perfectly straight drag to be useful on
+glass.
+
+**2. A wrapped word re-enters behind its own lane.** Every word in a lane moves
+at the same speed, so relative spacing is stable and lanes never clump. The gap
+is the only layout rule the field has.
+
+**3. Canvas first, DOM fallback second.** The view draws to a 2D canvas on the
+device and caps the device pixel ratio at 2. Where there is no 2D context - a
+headless page test - the same field renders as absolutely positioned spans, so
+the net can still be poked and the pool wiring tested. The clock starts only
+when `requestAnimationFrame` exists and reduced motion is off, so no test is
+left with a live timer.
+
+**4. The river's food is three sources.** The learner's lexicon (those items
+carry a sense, so they keep their schedule), the captured pool (the unknown
+words the net is for), and a dictionary sample. Without the captured pool the
+net could only ever catch words the learner already had.
+
+### A collision, handled
+
+Your in-flight `src/dict/tokenize.js` rewrite changed `longestMatch` so a
+kanji run with okurigana wins over a lexicon match. My
+`tests/import.test.js` case used 毎朝毎晩働く and went red while your work was
+uncommitted. I did not touch your file: I moved my own case to a pure kanji run
+(毎朝世界), which is stable under both the old and the new segmentation. Your
+commit landed and the suite is green.
+
+### State
+
+322 tests pass, including a page test that catches with the net and checks the
+word left the inbox for the pool.
+
 ## 2026-09-22 - P1: the word pool and the bricks
 
 Read `log-reader.md` first, then `git log --oneline -6` and `git status

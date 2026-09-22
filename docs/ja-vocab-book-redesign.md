@@ -1,6 +1,6 @@
 # iPad-first redesign: the iOS shell and the brick model
 
-Status: **decisions locked; P0 (the iOS shell) and P1 (the pool and the bricks) are implemented.** This supersedes the page and
+Status: **decisions locked; P0 (the iOS shell), P1 (the pool and the bricks) and P2 (the river and the net) are implemented.** This supersedes the page and
 navigation parts of `ja-vocab-book-design.md`. The engine described there -
 schema, FSRS-6, passive track, mining funnel, shared dictionary - is reused
 unchanged.
@@ -135,7 +135,7 @@ pacing layer on top:
 | --- | --- |
 | P0 | iOS shell and design system: tab bar, nav bar, sheets, tokens. No engine change; the suite stays green. **Done.** |
 | P1 | Pool and bricks: data model, bricking algorithm, brick session. DB version 3. **Done.** |
-| P2 | River and net: canvas flow, drag-to-cast, catch into the pool. |
+| P2 | River and net: canvas flow, drag-to-cast, catch into the pool. **Done.** |
 | P3 | The two sections: Learn and Overview; the old five tabs are demoted. |
 | P4 | PWA polish: home-screen fullscreen, motion, empty and error states, touch detail. |
 
@@ -175,6 +175,30 @@ sessions because the card chosen is the lowest-mode one that is due.
 The hybrid rule lives in `nextBrickState`: the brick's due date is the median
 of its cards' next intervals, three or more Again ratings pull the whole brick
 to tomorrow, and a brick retires once every card reaches a 21-day stability.
+
+### P2, as built
+
+| File | What it is |
+| --- | --- |
+| `src/lexicon/river-field.js` | pure: lanes, tiling, wrap-around, and the net's hit test |
+| `src/lexicon/river-view.js` | canvas drawing, the clock, pointer handling, and a DOM fallback where there is no 2D context |
+| `src/lexicon/river-pool.js` | the field's food: the lexicon, the captured pool, and a dictionary sample, shuffled |
+| `src/lexicon/entry.js` | the river tab: start and stop, pause, a new course, and the catch sheet |
+
+The field is six lanes alternating direction, each at its own speed, with words
+tiled along them and recycled behind their lane so the stream never ends. The
+view caps the device pixel ratio at 2 and reads its colours from the tokens, so
+the river follows the theme; `prefers-reduced-motion` draws one static frame
+instead of animating.
+
+The net: press and drag catches every word it touches, and releasing opens the
+shell's sheet with *add to the pool* and *release*. A caught word goes through
+`addToPool`, so it is carded mechanically like any other capture, and
+`buildBricks` runs straight after.
+
+The river's food is three sources: the learner's own lexicon (whose items carry
+a sense, so they keep their schedule), the captured pool (the unknown words the
+net is for), and a dictionary sample.
 
 The reader boundary is `docs/coordination/interface-shell.md`, proposed by
 agent-reader. The shell sets `document.documentElement.dataset.shell = 'on'`

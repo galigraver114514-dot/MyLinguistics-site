@@ -7,7 +7,7 @@
 
 import { openDb } from './db.js';
 import { loadDictionary } from './dictionary.js';
-import { createRiver } from './river.js';
+import { createRiverView } from './river-view.js';
 import { Lexicon, SETTINGS } from './store.js';
 import { SEED_DEFS } from './seed-ja.js';
 import { schedule } from './srs.js';
@@ -107,7 +107,12 @@ var FALLBACK = {
   'wb.brick.unknown': 'Ungraded',
   'wb.brick.mixed': 'Mixed',
   'wb.brick.done': 'Brick {name} done',
-  'wb.brick.doneNote': '{n} cards were marked Again.'
+  'wb.brick.doneNote': '{n} cards were marked Again.',
+  'wb.river.count': '{n} words in the river',
+  'wb.river.catch': 'Caught {n} words',
+  'wb.river.keep': 'Add to the word pool',
+  'wb.river.release': 'Release',
+  'wb.river.kept': '{n} of {total} words added to the pool.'
 };
 
 function formatDue(ms) {
@@ -728,116 +733,151 @@ async function resetAll() {
 }
 
 /* ------------------------------------------------------------------ river
- * A random, context-free stream. It never writes to FSRS; each word that
- * reaches the middle only records an exposure, so the passive familiarity
- * model learns from it like any other passive channel.
+ * The word river: a field of words flowing in lanes, and a net. It never
+ * writes to FSRS. A caught word goes into the pool and is carded mechanically;
+ * a word that is already the learner's own keeps its sense and its schedule.
  */
 
-var RIVER = { window: 5, itemHeight: 92, dwell: 2800, timer: null, feed: null, paused: false, items: [], token: null, sample: 60 };
+var RIVER = { view: null, pool: [], cursor: 0, loading: false, token: null, paused: false, pending: [], sample: 60, count: 70 };
 
+/* The pool: the learner's words, the captured candidates, and a dictionary
+ * sample, in one shuffled list. It is refilled in the background before it runs
+ * out, so the stream never waits. */
 async function riverPool() {
   var senses = Object.keys(state.senseById).map(function (id) { return state.senseById[id]; });
+  var candidates = [];
+  if (state.lex && typeof state.lex.listPool === 'function') {
+    try { candidates = await state.lex.listPool(); } catch (err) { candidates = []; }
+  }
   return collectRiverPool({
     senses: senses,
     wordById: state.wordById,
     dictionary: state.dictionary,
+    candidates: candidates,
     limit: RIVER.sample
   });
 }
 
-function riverItemHtml(item, current) {
-  return '<div class="wb-river-item' + (current ? ' is-current' : '') + '">' +
-    '<p class="wb-river-term">' + esc(item.term) + '</p>' +
-    '<p class="wb-river-reading">' + esc(item.reading || '') + '</p>' +
-    '<p class="wb-river-definition">' + esc(item.definition || '') + '</p>' +
-    '</div>';
+function nextRiverWord() {
+  if (!RIVER.pool.length) return null;
+  var item = RIVER.pool[RIVER.cursor % RIVER.pool.length];
+  RIVER.cursor += 1;
+  maybeRefillRiver();
+  return { term: item.term, reading: item.reading || '' };
 }
 
-function exposeRiver(index) {
-  var item = RIVER.items[index];
-  if (!item || !item.senseId || !state.lex) return;
-  var result = state.lex.recordExposure(item.senseId, 'river', Date.now());
-  if (result && result.catch) result.catch(function () { /* best effort */ });
+function maybeRefillRiver() {
+  if (RIVER.loading) return;
+  if (!RIVER.pool.length || RIVER.cursor < RIVER.pool.length * 0.7) return;
+  RIVER.loading = true;
+  riverPool().then(function (items) {
+    if (items.length) {
+      RIVER.pool = items;
+      RIVER.cursor = 0;
+    }
+    RIVER.loading = false;
+  }).catch(function () { RIVER.loading = false; });
 }
 
-function highlightRiverCenter() {
-  var track = el('wbRiverTrack');
-  if (!track) return;
-  var nodes = track.children;
-  var center = Math.floor(nodes.length / 2);
-  for (var i = 0; i < nodes.length; i += 1) {
-    if (i === center) nodes[i].classList.add('is-current');
-    else nodes[i].classList.remove('is-current');
-  }
-  exposeRiver(center);
+function updateRiverCount() {
+  var node = el('wbRiverCount');
+  if (!node) return;
+  var count = RIVER.view && RIVER.view.field ? RIVER.view.field.items().length : RIVER.pool.length;
+  node.textContent = tText('wb.river.count', { n: count });
 }
 
 async function startRiver() {
   stopRiver();
   var token = {};
   RIVER.token = token;
-  var track = el('wbRiverTrack');
-  if (!track) return;
+  var canvas = el('wbRiverCanvas');
+  if (!canvas) return;
+
   var pool = await riverPool();
   if (RIVER.token !== token) return;
+  var empty = el('wbRiverEmpty');
   if (!pool.length) {
-    track.style.transform = 'translateY(0)';
-    track.innerHTML = '<p class="muted" style="padding:24px;">' + esc(tText('wb.river.empty')) + '</p>';
+    if (empty) show(empty, true);
     return;
   }
-  RIVER.feed = createRiver(pool, { random: Math.random });
-  RIVER.items = [];
+  if (empty) show(empty, false);
+  RIVER.pool = pool;
+  RIVER.cursor = 0;
   RIVER.paused = false;
-  var center = Math.floor(RIVER.window / 2);
-  var html = '';
-  for (var i = 0; i < RIVER.window; i += 1) {
-    var item = RIVER.feed.next();
-    RIVER.items.push(item);
-    html += riverItemHtml(item, i === center);
-  }
-  track.style.transition = 'none';
-  track.style.transform = 'translateY(0)';
-  track.innerHTML = html;
-  exposeRiver(center);
-  RIVER.timer = window.setInterval(riverStep, RIVER.dwell);
-}
-
-function riverStep() {
-  if (RIVER.paused || document.hidden) return;
-  var track = el('wbRiverTrack');
-  if (!track || !RIVER.feed) return;
-
-  function shift() {
-    if (!RIVER.feed) return;
-    var item = RIVER.feed.next();
-    RIVER.items.shift();
-    RIVER.items.push(item);
-    if (track.firstChild) track.removeChild(track.firstChild);
-    track.insertAdjacentHTML('beforeend', riverItemHtml(item, false));
-    track.style.transition = 'none';
-    track.style.transform = 'translateY(0)';
-    highlightRiverCenter();
-  }
-
-  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduced) { shift(); return; }
-  track.style.transition = 'transform 0.5s ease';
-  track.style.transform = 'translateY(-' + RIVER.itemHeight + 'px)';
-  window.setTimeout(shift, 520);
+  RIVER.pending = [];
+  RIVER.view = createRiverView(canvas, {
+    fallback: el('wbRiverFallback'),
+    count: RIVER.count,
+    nextWord: nextRiverWord,
+    onCatch: handleRiverCatch
+  });
+  RIVER.view.resize();
+  RIVER.view.start();
+  var pause = el('wbRiverPause');
+  if (pause) pause.textContent = tText('wb.river.pause');
+  updateRiverCount();
+  /* A seam for the page tests, and a handle for debugging. */
+  if (window.ML) window.ML.river = { field: RIVER.view.field, view: RIVER.view, pool: function () { return RIVER.pool; } };
 }
 
 function stopRiver() {
   RIVER.token = null;
-  if (RIVER.timer) {
-    window.clearInterval(RIVER.timer);
-    RIVER.timer = null;
+  RIVER.pending = [];
+  if (RIVER.view) {
+    RIVER.view.stop();
+    RIVER.view.release();
+    RIVER.view = null;
   }
-  RIVER.feed = null;
-  RIVER.items = [];
+}
+
+/* Releasing the net opens the shell's catch sheet. Without the shell it keeps
+ * the words rather than silently dropping them. */
+function handleRiverCatch(items) {
+  RIVER.pending = items.map(function (item) { return item.term; });
+  var title = tText('wb.river.catch', { n: RIVER.pending.length });
+  if (window.ML && window.ML.shell && window.ML.shell.openSheet) {
+    window.ML.shell.openSheet({
+      title: title,
+      items: [
+        { label: tText('wb.river.keep'), onClick: function () { collectRiverCatch(); } },
+        { label: tText('wb.river.release'), onClick: function () { releaseRiverCatch(); } }
+      ]
+    });
+  } else {
+    collectRiverCatch();
+  }
+}
+
+async function collectRiverCatch() {
+  var terms = RIVER.pending.slice();
+  RIVER.pending = [];
+  var carded = 0;
+  for (var i = 0; i < terms.length; i += 1) {
+    var result = await state.lex.addToPool({ wordKey: terms[i] }, { dictionary: state.dictionary });
+    if (result && result.state === 'carded') carded += 1;
+  }
+  await state.lex.buildBricks();
+  if (RIVER.view) RIVER.view.release();
+  var note = el('wbRiverCatch');
+  if (note) {
+    note.textContent = tText('wb.river.kept', { n: carded, total: terms.length });
+    show(note, true);
+  }
+  await refresh();
+  await renderInbox();
+}
+
+function releaseRiverCatch() {
+  RIVER.pending = [];
+  if (RIVER.view) RIVER.view.release();
 }
 
 function toggleRiver() {
   RIVER.paused = !RIVER.paused;
+  if (RIVER.view) {
+    if (RIVER.paused) RIVER.view.stop();
+    else RIVER.view.start();
+  }
   var button = el('wbRiverPause');
   if (button) button.textContent = RIVER.paused ? tText('wb.river.resume') : tText('wb.river.pause');
 }
