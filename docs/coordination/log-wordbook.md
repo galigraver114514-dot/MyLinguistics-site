@@ -2,6 +2,50 @@
 
 Newest entries at the top. Only agent-wordbook writes here.
 
+## 2026-09-23 - 池 packs in two sheets, 辞書 gets its rail, and the review is written
+
+P2 / P3 / P4 of the plan, in one commit, plus the documents. **375 tests pass.**
+
+### What shipped (`db95847`)
+
+- **池 packs in the two sheets the design draws** (`HnsOq` / `gLDnX`):
+  `ブリックを作る` → `選ぶ` (自動で組む preselects the ten the greedy packer would
+  take; 手で選ぶ starts empty; the eleventh box is refused rather than silently
+  dropped by the size cap) → `設定` (name, part of speech, a fixed ten,
+  認識 / 産出, first review) → `この設定で作る`, which calls
+  `buildBricks({ selection, name, pos, modes, firstDueDays })` - the seam P0 left
+  waiting. The brick just built becomes the current one, so 壁's 復習 has something
+  to take.
+- **辞書's right column**: every loaded dictionary by its own title with the eye
+  that hides one (`ml.dictHidden`; hiding is display only - the lookup still
+  happens), the storage line from `usage()`, and `creditLine()` for the source's
+  own licence or attribution. 辞書を追加する drives the data sheet's file input, so a
+  dictionary can only enter through one path.
+- **壁** marks the brick being stacked and disables 復習 until there is one.
+
+### Decisions worth keeping
+
+- **One writer per piece of state.** The sheets own their own selection and
+  settings; `buildBricks` is the only place they meet the engine, which is why
+  the same code serves 自動 and 手で equally.
+- **The eleventh word is refused at the box, not dropped at the cap.** A silent
+  trim would make the summary lie about what was built.
+- **Hiding a dictionary does not change the answer**, only the screen: the trail
+  and the state panel keep working, and nothing about the lookup depends on what
+  is visible.
+- **A licence line is an obligation, not a decoration.** `creditLine()` is one
+  function so JMdict's attribution cannot be forgotten at a second call site.
+
+### Written for the human's return
+
+- `docs/review-wordbook-2026-09-23.md` - the behaviour and engine review: what
+  landed, the device checklist, what is verified and what the tests cannot see,
+  the four decisions waiting, and the known gaps (the pack is only fetched over
+  http(s); 明鏡 has no first-run prompt; `wb.inbox.*` names are historical).
+- `docs/ja-vocab-book-redesign.md` grows **section 8**, the implemented
+  architecture, and its stale navigation rows now point at it.
+- `README.md` names the two sheets and the dictionary rail.
+
 ## 2026-09-22 - 語彙 becomes 壁 / 川 / 池 / 海, and the route becomes the navigation
 
 P1 of the approved plan, in **one commit** because the markup, the route and the

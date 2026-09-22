@@ -23,9 +23,11 @@ sections, and a review unit built around the way words are actually captured.
 
 Main device: iPad, Safari, normally added to the home screen.
 
-- **Global navigation**: a bottom tab bar (`阅读 / Learn / Overview`) plus a
-  per-tab large-title navigation bar that collapses to an inline title on
-  scroll. Both use a translucent material and respect the safe area.
+- **Global navigation**: one floating capsule (Home / Reading / Vocabulary) with
+  a translucent material, a hairline and one shadow. On the vocabulary page it
+  expands in place to reveal 壁 / 川 / 池 / 海. **Superseded on 2026-09-22**: this
+  replaces the bottom tab bar and the large-title navigation bar described here
+  and in section 6, and the in-page tab row with it. See section 8.
 - **Gestures**: edge-swipe back within a tab, pull to refresh, long press for a
   context menu, and every modal is a bottom sheet with a grabber and
   drag-to-dismiss.
@@ -40,6 +42,10 @@ Main device: iPad, Safari, normally added to the home screen.
   audible instead. It is not promised.
 
 ## 3. Information architecture
+
+**Superseded on 2026-09-22 by section 8.** The three destinations are ホーム /
+読書 / 語彙, and 語彙 carries four views rather than two sections. What follows is
+kept as the record of the design this replaced.
 
 Two sections only.
 
@@ -61,6 +67,56 @@ Everything that is about the lexicon rather than about doing today.
 - Mastery.
 - Data management (mine text, import a frequency list, import a Yomitan
   dictionary, backup and restore) behind a `…` menu.
+
+## 8. The vocabulary redesign, as implemented
+
+Decided by the human on 2026-09-22 and implemented in `d43dc6b` and
+`db95847`. Where this section and the sections above disagree, this one wins.
+
+### Navigation
+
+One floating capsule, written statically into every page as
+`#tabbar.capsule` (so the site navigates without JavaScript). Three
+destinations - ホーム (`index.html`), 読書 (`reader/index.html`), 語彙
+(`study.html`) - and on the vocabulary page the four sub-items 壁 / 川 / 池 / 海
+after a hairline. `.tabbar-item[data-tab]` and `a.tabbar-sub[data-view]` are
+the load-bearing hooks; `#tabbar` keeps its name because the reader detects the
+shell through `.tabbar`.
+
+The bottom tab bar, the large-title navigation bar and the in-page tab row are
+deleted.
+
+### The route is the navigation
+
+| Route | View |
+| --- | --- |
+| `#wall` | 壁 - the wall: bricks stacked in review order, ten readable words each |
+| `#wall/review` | 壁 - the drill: one card per word, FSRS-6 |
+| `#river` | 川 - the river, the rod, the bucket |
+| `#pool` | 池 - the words waiting for a brick, and the two sheets that pack them |
+| `#sea` | 海 - 単語総覧: your own vocabulary and the entry card |
+| `#sea/bricks` | 海 - ブリック総覧 |
+| `#sea/dict` | 海 - 辞書: every loaded dictionary, and the words you looked up |
+
+An unknown route falls back to `#wall`. The passive track is deleted; the
+familiarity helpers stay, because 既知 uses them.
+
+### 池 packs in sheets
+
+`ブリックを作る` opens 選ぶ over the pool - 自動で組む (the ten the greedy
+packer would take) or 手で選ぶ, with a checkbox per waiting word - then 設定:
+name, part of speech, a fixed ten words, 認識 / 産出, and the first review
+(today / tomorrow / in three days). `buildBricks({ selection, name, pos, modes,
+firstDueDays })` writes exactly that. The brick just built becomes the current
+one.
+
+### 海 switches in the left column
+
+A segmented control at the top of the left column, not a control buried
+mid-column. 辞書's left column is the trail of words looked up, with relative
+times; hiding a dictionary with the eye is a display choice - the lookup still
+happens - and each source's own licence or attribution is rendered with its
+entries, which is an obligation for JMdict rather than a decoration.
 
 ## 4. The pipeline
 
@@ -129,7 +185,7 @@ pacing layer on top:
 
 | Decision | Choice |
 | --- | --- |
-| Global navigation | Bottom tab bar: Reader / Learn / Overview |
+| Global navigation | **Superseded**: one floating capsule, Home / Reading / Vocabulary, expanding on 語彙 to 壁 / 川 / 池 / 海 (section 8) |
 | Review gesture | Four-way swipe grading |
 | Brick scheduling | C, hybrid: per-card grades plus brick pacing |
 | Net | Drag out an area; everything inside is caught |
@@ -144,6 +200,7 @@ pacing layer on top:
 | P2 | River and net: canvas flow, drag-to-cast, catch into the pool. **Done.** |
 | P3 | The two sections: Learn and Overview; the old five tabs are demoted. **Done.** |
 | P4 | PWA polish: home-screen fullscreen, motion, empty and error states, touch detail. |
+| P5 | The 語彙 redesign: the floating capsule, 壁 / 川 / 池 / 海, the route, the packing sheets, the dictionary view. **Done** (`d43dc6b`, `db95847`); see section 8. |
 
 ### P0, as built
 

@@ -184,6 +184,42 @@
           <p class="muted small hidden" id="wbMineResult"></p>
         </details>
       </div>
+      <!-- 池 - the two floating sheets. 選ぶ then 設定, over the pool and never a
+           separate screen (designs HnsOq / gLDnX). They live inside the pool
+           panel so switching destination closes them. -->
+      <div class="wb-backdrop" id="wbSheetBackdrop" hidden></div>
+
+      <section class="wb-sheet" id="wbPickSheet" role="dialog" aria-modal="true" aria-labelledby="wbPickTitle" hidden>
+        <header class="wb-sheet-head">
+          <h2 id="wbPickTitle" data-i18n="pool.build.title">Build a brick</h2>
+          <button class="btn btn-ghost btn-small" id="wbPickClose" type="button" data-i18n="pool.close">Close</button>
+        </header>
+        <div class="wb-segmented" id="wbPickMode" role="tablist">
+          <button class="wb-seg is-active" type="button" role="tab" data-pick-mode="auto" aria-selected="true" data-i18n="pool.build.auto">Pack automatically</button>
+          <button class="wb-seg" type="button" role="tab" data-pick-mode="manual" aria-selected="false" data-i18n="pool.build.manual">Choose by hand</button>
+        </div>
+        <p class="muted small" data-i18n="pool.pick.note">Ten words to a brick. Uncheck the ones to leave out.</p>
+        <div class="wb-pick-list" id="wbPickList"></div>
+        <p class="muted small"><span id="wbPickCount"></span> <span id="wbPickPos"></span></p>
+        <div class="wb-sheet-actions">
+          <button class="btn btn-ghost" id="wbPickBack" type="button" data-i18n="pool.back">Back</button>
+          <button class="btn btn-primary" id="wbPickNext" type="button" data-i18n="pool.pick.next">Next: settings</button>
+        </div>
+      </section>
+
+      <section class="wb-sheet" id="wbSetSheet" role="dialog" aria-modal="true" aria-labelledby="wbSetTitle" hidden>
+        <header class="wb-sheet-head">
+          <h2 id="wbSetTitle" data-i18n="pool.set.title">Brick settings</h2>
+          <button class="btn btn-ghost btn-small" id="wbSetClose" type="button" data-i18n="pool.close">Close</button>
+        </header>
+        <p class="muted small" id="wbSetSteps" data-i18n="pool.steps">1 Pick words  2 Settings  3 Build</p>
+        <div class="wb-pick-list" id="wbSetBody"></div>
+        <p class="muted small" id="wbSetSummary"></p>
+        <div class="wb-sheet-actions">
+          <button class="btn btn-ghost" id="wbSetBack" type="button" data-i18n="pool.back">Back</button>
+          <button class="btn btn-primary" id="wbSetCreate" type="button" data-i18n="pool.set.create">Build it</button>
+        </div>
+      </section>
     </div>
 
     <!-- 海 - one sea, three parts, switched by the segmented control at the top
@@ -223,6 +259,13 @@
           <div class="wb-stats" id="wbSeaStats"></div>
           <div class="wb-breakdown" id="wbSeaBreakdown"></div>
         </div>
+        <div class="wb-card-block">
+          <h2 class="wb-rail-title" data-i18n="dict.sources">Sources</h2>
+          <div class="wb-source-list" id="wbSourcesList"></div>
+          <p class="muted small" data-i18n="dict.order">Shown top to bottom. Hide one with the eye.</p>
+          <p class="muted small" id="wbSourceUsage"></p>
+        </div>
+        <button class="btn btn-primary" id="wbDictAdd" type="button" data-i18n="dict.add">Add a dictionary</button>
       </aside>
     </div>
 

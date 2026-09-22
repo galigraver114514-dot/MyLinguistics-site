@@ -14,12 +14,13 @@ import { schedule } from './srs.js';
 import { isOutputMode } from './schema.js';
 import { collectRiverPool } from './river-pool.js';
 import { brickLabel as formatBrickLabel } from './brick-label.js';
+import { formBricks, modesForKinds, BRICK_SIZE } from './brick.js';
 import { POOL_EVENT, push as pushPoolLog, list as readPoolLog } from './pool-log.js';
 import { record as recordLookup, list as readLookupLog } from './lookup-log.js';
 import { relativeTime } from './rel-time.js';
 import {
   sourceTitle, languageBadge, hiddenFrom, hiddenTo, toggleHidden, visibleGroups,
-  entryHeadline, entryChips, senseBlocks, firstGloss, formatBytes
+  entryHeadline, entryChips, senseBlocks, firstGloss, formatBytes, creditLine
 } from './dict-view.js';
 
 /* The four 語彙 destinations and 海's three parts. One hash drives both the
@@ -30,6 +31,13 @@ var state = {
   scope: 'words',
   entryKey: null,
   poolFilter: 'waiting',
+  pickMode: 'auto',
+  pickedMap: {},
+  setKeys: [],
+  setPos: null,
+  setKinds: { recognize: true, produce: true },
+  setDue: 0,
+  setName: null,
   wordByLemma: {},
   posByLemma: {},
   encounterByKey: {},
@@ -279,6 +287,8 @@ async function importDictionary(file) {
     await state.lex.enrichFromDictionary(state.dictionary);
     await refresh();
   }
+  await renderSources();
+  await renderDict();
 }
 
 async function forgetDictionaries() {
@@ -1021,7 +1031,8 @@ async function renderWall() {
             cells.push('<span class="wb-wall-cell wb-wall-cell-empty" aria-hidden="true"></span>');
           }
         }
-        return '<section class="wb-wall-row" data-brick="' + esc(brick.id) + '" data-phase="' + esc(brick.phase) + '">' +
+        var active = state.brick && state.brick.id === brick.id ? ' is-active' : '';
+        return '<section class="wb-wall-row' + active + '" data-brick="' + esc(brick.id) + '" data-phase="' + esc(brick.phase) + '">' +
           '<header class="wb-wall-head">' +
             '<span class="wb-wall-tab" data-pos="' + esc(groupOf(brick.pos)) + '" aria-hidden="true"></span>' +
             '<strong>' + esc(formatBrickLabel(brick, tText)) + '</strong>' +
@@ -1034,6 +1045,9 @@ async function renderWall() {
     }
   }
   renderWallRail(sorted);
+
+  var reviewNow = el('wbWallReviewNow');
+  if (reviewNow) reviewNow.disabled = !state.brick;
 }
 
 /* The left column: every brick, with its ten cells at a glance. Each row is
@@ -1237,14 +1251,63 @@ async function renderDict(term) {
         '<span class="wb-chips">' + chips + '</span>' + blocksOfSenses + '</article>';
     }).join('');
     return '<section class="wb-dict-block" data-dict="' + esc(group.id) + '">' + head + body +
-      '<p class="muted small">' + esc(group.attribution || group.licence || '') + '</p></section>';
+      '<p class="muted small">' + esc(creditLine(group)) + '</p></section>';
   }).join('');
   state.dictGroups = shown;
   renderDictHistory();
+  await renderSources();
 }
 
 function readHidden() {
   try { return JSON.parse(window.localStorage.getItem('ml.dictHidden') || '[]'); } catch (err) { return []; }
+}
+
+function writeHidden(list) {
+  try { window.localStorage.setItem('ml.dictHidden', JSON.stringify(list)); } catch (err) { /* full or blocked */ }
+}
+
+/* 出典 - every loaded dictionary, in the order lookupGrouped() reads them, with
+ * the eye that hides one. Hiding is a display choice: the lookup still happens,
+ * and the trail and the state panel do not depend on what is on screen. */
+async function renderSources() {
+  var list = el('wbSourcesList');
+  var dict = state.dictionary;
+  var loaded = (dict && typeof dict.sources === 'function') ? (dict.sources() || []) : [];
+  var hidden = hiddenFrom(readHidden());
+  if (list) {
+    list.innerHTML = loaded.length ? loaded.map(function (info) {
+      var badge = languageBadge(info);
+      var off = !!hidden[info.id];
+      return '<div class="wb-source-row" data-source="' + esc(info.id) + '">' +
+        '<span class="wb-source-main"><strong>' + esc(sourceTitle(info)) + '</strong>' +
+        (badge ? '<span class="wb-chip">' + esc(tText(badge)) + '</span>' : '') +
+        '<span class="muted small">' + esc(String(info.entryCount || 0)) + '</span></span>' +
+        '<button class="btn btn-ghost btn-small" type="button" data-source-toggle="' + esc(info.id) + '" aria-pressed="' + (off ? 'false' : 'true') + '">' +
+          esc(off ? tText('dict.show') : tText('dict.hide')) + '</button>' +
+        '<span class="muted small wb-source-credit">' + esc(creditLine(info)) + '</span>' +
+      '</div>';
+    }).join('') : '<p class="muted small">' + esc(tText('dict.empty')) + '</p>';
+  }
+  var usage = el('wbSourceUsage');
+  if (usage) {
+    if (dict && typeof dict.usage === 'function') {
+      try {
+        var value = await dict.usage();
+        usage.textContent = tText('dict.usage') + ' ' + formatBytes(value && value.bytes) + ' / ' + formatBytes(value && value.quota);
+      } catch (err) {
+        usage.textContent = '';
+      }
+    } else {
+      usage.textContent = '';
+    }
+  }
+}
+
+async function toggleSource(id) {
+  var next = toggleHidden(hiddenFrom(readHidden()), id);
+  writeHidden(hiddenTo(next));
+  await renderSources();
+  await renderDict();
 }
 
 function renderDictHistory() {
@@ -1450,20 +1513,218 @@ async function returnFromBrick(wordKey) {
   await renderEntry();
 }
 
-/* P1 packs the waiting pool with the greedy packer. The two sheets that let the
- * learner choose the ten words land next; this keeps 池 usable until then. */
-async function buildFromPool() {
-  var built = await state.lex.buildBricks({ partial: false });
+/* ---------------------------------------------------------------- the sheets
+ * 池 packs in two floating sheets over the pool, never on a screen of its own:
+ * 選ぶ says which words, 設定 says how. The engine has taken a hand-picked
+ * selection and a settings object since P0, so these two are the only place
+ * they meet. */
+
+function closeSheets() {
+  show(el('wbPickSheet'), false);
+  show(el('wbSetSheet'), false);
+  var backdrop = el('wbSheetBackdrop');
+  if (backdrop) show(backdrop, false);
+}
+
+function openSheet(id) {
+  var backdrop = el('wbSheetBackdrop');
+  if (backdrop) show(backdrop, true);
+  show(el(id), true);
+}
+
+/* 自動で組む means "the next ten the greedy rule would take", so it asks the
+ * packer rather than inventing a second order; 手で選ぶ starts empty. */
+function defaultPick() {
+  var drafts = formBricks(state.waiting || [], { size: BRICK_SIZE, partial: false });
+  if (drafts.length) return drafts[0].entries.map(function (entry) { return entry.wordKey; });
+  return (state.waiting || []).slice(0, BRICK_SIZE).map(function (item) { return item.wordKey; });
+}
+
+function pickedKeys() {
+  return (state.waiting || []).map(function (item) { return item.wordKey; })
+    .filter(function (key) { return state.pickedMap[key]; });
+}
+
+/* The part of speech a hand-picked brick is offered as: shared when every word
+ * agrees, empty when they do not. */
+function sharedPos(keys) {
+  var pos = null;
+  for (var i = 0; i < keys.length; i += 1) {
+    var one = posOf(keys[i]);
+    if (!one) return '';
+    if (pos === null) pos = one;
+    else if (pos !== one) return '';
+  }
+  return pos || '';
+}
+
+function openPickSheet(mode) {
+  state.pickMode = mode || 'auto';
+  state.pickedMap = {};
+  var initial = state.pickMode === 'auto' ? defaultPick() : [];
+  initial.forEach(function (key) { state.pickedMap[key] = true; });
+  renderPickSheet();
+  openSheet('wbPickSheet');
+}
+
+/* Switching between 自動で組む and 手で選ぶ resets the list: the automatic
+ * choice is not something to hand-edit, and an empty manual list is the point
+ * of choosing by hand. */
+function setPickMode(mode) {
+  state.pickMode = mode === 'manual' ? 'manual' : 'auto';
+  state.pickedMap = {};
+  if (state.pickMode === 'auto') {
+    defaultPick().forEach(function (key) { state.pickedMap[key] = true; });
+  }
+  renderPickSheet();
+}
+
+function renderPickSheet() {
+  var pick = el('wbPickSheet');
+  if (!pick) return;
+  var buttons = pick.querySelectorAll('#wbPickMode [data-pick-mode]');
+  for (var i = 0; i < buttons.length; i += 1) {
+    var on = buttons[i].getAttribute('data-pick-mode') === state.pickMode;
+    buttons[i].classList.toggle('is-active', on);
+    buttons[i].setAttribute('aria-selected', on ? 'true' : 'false');
+  }
+
+  var list = el('wbPickList');
+  var waiting = state.waiting || [];
+  if (list) {
+    list.innerHTML = waiting.length ? waiting.map(function (item) {
+      var checked = state.pickedMap[item.wordKey] ? ' checked' : '';
+      return '<label class="wb-pick-row">' +
+        '<input type="checkbox" data-pick="' + esc(item.wordKey) + '"' + checked + '>' +
+        monogram(item.wordKey) +
+        '<span class="wb-pick-word">' + esc(item.wordKey) + '</span>' +
+        '<span class="wb-chip">' + esc(posOf(item.wordKey) || '') + '</span>' +
+      '</label>';
+    }).join('') : '<p class="muted">' + esc(tText('pool.pick.empty')) + '</p>';
+  }
+
+  var count = pickedKeys().length;
+  var countNode = el('wbPickCount');
+  if (countNode) countNode.textContent = tText('pool.pick.count', { n: count, total: waiting.length });
+  var posNode = el('wbPickPos');
+  var pos = sharedPos(pickedKeys());
+  if (posNode) posNode.textContent = pos ? tText('pool.pick.pos', { pos: pos }) : '';
+  var next = el('wbPickNext');
+  if (next) next.disabled = count === 0;
+}
+
+/* Ten words is what a brick is, so the eleventh box is refused rather than
+ * silently dropped when the packer caps the draft. */
+function togglePick(wordKey, on) {
+  if (on && pickedKeys().length >= BRICK_SIZE) {
+    renderPickSheet();
+    return false;
+  }
+  if (on) state.pickedMap[wordKey] = true;
+  else delete state.pickedMap[wordKey];
+  renderPickSheet();
+  return true;
+}
+
+var ALL_POS = ['動詞', '名詞', '挨拶', '副詞', '表現', '接続詞'];
+
+function defaultBrickName(keys) {
+  var pos = state.setPos || sharedPos(keys);
+  var group = pos ? { kind: 'pos', value: pos } : { kind: 'mixed', value: '' };
+  return formatBrickLabel({ id: 'brick:x-' + ((state.bricks || []).length + 1), group: group }, tText);
+}
+
+function openSetSheet() {
+  var keys = pickedKeys();
+  if (!keys.length) return;
+  state.setKeys = keys;
+  state.setPos = sharedPos(keys) || null;
+  state.setKinds = { recognize: true, produce: true };
+  state.setDue = 0;
+  state.setName = null;
+  renderSetSheet();
+  show(el('wbPickSheet'), false);
+  openSheet('wbSetSheet');
+}
+
+function renderSetSheet() {
+  var body = el('wbSetBody');
+  if (!body) return;
+  var kinds = state.setKinds;
+  body.innerHTML =
+    '<label class="wb-field wb-field-wide"><span>' + esc(tText('pool.set.name')) + '</span>' +
+      '<input id="wbSetName" type="text" autocomplete="off" value="' + esc(state.setName || defaultBrickName(state.setKeys)) + '"></label>' +
+    '<p class="muted small">' + esc(tText('pool.set.pos')) + ' ・ ' + esc(tText('pool.set.autoFromPick')) + '</p>' +
+    '<div class="wb-segmented wb-segmented-chips" id="wbSetPos" role="tablist">' + ALL_POS.map(function (pos) {
+      return '<button class="wb-seg' + (pos === state.setPos ? ' is-active' : '') + '" type="button" data-set-pos="' + esc(pos) + '">' + esc(pos) + '</button>';
+    }).join('') + '</div>' +
+    '<div class="wb-set-row"><span>' + esc(tText('pool.set.size')) + '</span>' +
+      '<strong>' + esc(tText('overview.brickSize', { n: BRICK_SIZE })) + '</strong>' +
+      '<span class="muted small">' + esc(tText('pool.set.sizeFixed')) + '</span></div>' +
+    '<p class="muted small">' + esc(tText('pool.set.modes')) + '</p>' +
+    '<div class="wb-segmented wb-segmented-chips" id="wbSetModes">' +
+      '<label class="wb-pick-row"><input type="checkbox" data-set-mode="recognize"' + (kinds.recognize ? ' checked' : '') + '>' +
+        '<span class="wb-pick-word">' + esc(tText('pool.mode.recognize')) + '</span></label>' +
+      '<label class="wb-pick-row"><input type="checkbox" data-set-mode="produce"' + (kinds.produce ? ' checked' : '') + '>' +
+        '<span class="wb-pick-word">' + esc(tText('pool.mode.produce')) + '</span></label>' +
+    '</div>' +
+    '<p class="muted small">' + esc(tText('pool.set.first')) + '</p>' +
+    '<div class="wb-segmented wb-segmented-chips" id="wbSetDue" role="tablist">' +
+      [['0', 'pool.due.today'], ['1', 'pool.due.tomorrow'], ['3', 'pool.due.in3']].map(function (pair) {
+        var on = String(state.setDue) === pair[0];
+        return '<button class="wb-seg' + (on ? ' is-active' : '') + '" type="button" data-set-due="' + pair[0] + '" aria-selected="' + (on ? 'true' : 'false') + '">' + esc(tText(pair[1])) + '</button>';
+      }).join('') + '</div>';
+  renderSetSummary();
+}
+
+function renderSetSummary() {
+  var node = el('wbSetSummary');
+  if (!node) return;
+  var labels = [];
+  if (state.setKinds.recognize) labels.push(tText('pool.mode.recognize'));
+  if (state.setKinds.produce) labels.push(tText('pool.mode.produce'));
+  var modes = labels.length === 2 ? tText('pool.summary.both') : (labels[0] || '');
+  var dueKey = state.setDue === 1 ? 'pool.due.tomorrow' : (state.setDue === 3 ? 'pool.due.in3' : 'pool.due.today');
+  var nameNode = el('wbSetName');
+  node.textContent = tText('pool.summary.line', {
+    name: (nameNode && nameNode.value) || state.setName || defaultBrickName(state.setKeys),
+    size: BRICK_SIZE,
+    modes: modes,
+    due: tText(dueKey)
+  });
+}
+
+async function createBrickFromSheet() {
+  var keys = (state.setKeys || []).slice();
+  if (!keys.length) return;
+  var nameNode = el('wbSetName');
+  var name = (nameNode && nameNode.value.trim()) || defaultBrickName(keys);
+  var modes = modesForKinds(Object.keys(state.setKinds).filter(function (kind) { return state.setKinds[kind]; }));
+  var built = await state.lex.buildBricks({
+    selection: keys,
+    name: name,
+    pos: state.setPos,
+    modes: modes,
+    firstDueDays: state.setDue
+  });
+  closeSheets();
+  pushPoolLog({ event: POOL_EVENT.toBrick, name: name, size: keys.length, at: Date.now() });
+  /* The brick the learner just built is the one they mean to study, so it
+   * becomes the current brick: 壁's 復習 has something to take. */
+  if (built.length) {
+    state.brick = built[0];
+    state.queue = await state.lex.brickQueue(built[0].id, Date.now());
+    state.index = 0;
+    state.flipped = false;
+    state.brickPaced = false;
+    state.brickResult = null;
+    state.sessionAgains = 0;
+  }
   var note = el('wbPoolNote');
   if (note) {
-    note.textContent = built.length
-      ? tText('pool.built', { name: brickLabel(built[0]), n: built[0].size })
-      : tText('pool.pick.empty');
+    note.textContent = built.length ? tText('pool.built', { name: name, n: keys.length }) : tText('pool.pick.empty');
     show(note, true);
   }
-  built.forEach(function (brick) {
-    pushPoolLog({ event: POOL_EVENT.toBrick, name: brickLabel(brick), size: brick.size, at: Date.now() });
-  });
   await refresh();
   await renderPool();
   await renderWall();
@@ -1500,7 +1761,56 @@ function bind() {
     var id = target && target.getAttribute ? target.getAttribute('data-grab') : null;
     if (id) grabBrick(id);
   });
-  el('wbPoolBuild').addEventListener('click', buildFromPool);
+  el('wbPoolBuild').addEventListener('click', function () { openPickSheet('auto'); });
+  var pickModes = document.querySelectorAll('#wbPickMode [data-pick-mode]');
+  for (var m = 0; m < pickModes.length; m += 1) {
+    pickModes[m].addEventListener('click', function (event) {
+      setPickMode(event.currentTarget.getAttribute('data-pick-mode'));
+    });
+  }
+  el('wbPickList').addEventListener('change', function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var key = target.getAttribute('data-pick');
+    if (key) togglePick(key, !!target.checked);
+  });
+  el('wbPickNext').addEventListener('click', openSetSheet);
+  el('wbPickBack').addEventListener('click', closeSheets);
+  el('wbPickClose').addEventListener('click', closeSheets);
+  el('wbSetClose').addEventListener('click', closeSheets);
+  el('wbSetBack').addEventListener('click', function () {
+    show(el('wbSetSheet'), false);
+    openSheet('wbPickSheet');
+  });
+  el('wbSheetBackdrop').addEventListener('click', closeSheets);
+  el('wbSetBody').addEventListener('click', function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var pos = target.getAttribute('data-set-pos');
+    var due = target.getAttribute('data-set-due');
+    if (pos) {
+      state.setPos = pos;
+      renderSetSheet();
+    } else if (due) {
+      state.setDue = Number(due);
+      renderSetSheet();
+    }
+  });
+  el('wbSetBody').addEventListener('change', function (event) {
+    var target = event.target;
+    if (!target || !target.getAttribute) return;
+    var kind = target.getAttribute('data-set-mode');
+    if (!kind) return;
+    state.setKinds[kind] = !!target.checked;
+    renderSetSummary();
+  });
+  el('wbSetCreate').addEventListener('click', createBrickFromSheet);
+  /* The name input is rendered on open, so its listener is delegated. */
+  el('wbSetBody').addEventListener('input', function (event) {
+    var target = event.target;
+    if (target && target.id === 'wbSetName') state.setName = target.value;
+    renderSetSummary();
+  });
   el('wbCard').addEventListener('click', function () {
     if (state.lookOnly) nextLookOnly();
     else if (!state.flipped) flip();
@@ -1566,6 +1876,17 @@ function bind() {
     var input = el('wbDictSearch');
     if (input) input.value = term;
     renderDict(term);
+  });
+  el('wbSourcesList').addEventListener('click', function (event) {
+    var target = event.target;
+    var id = target && target.getAttribute ? target.getAttribute('data-source-toggle') : null;
+    if (id) toggleSource(id);
+  });
+  el('wbDictAdd').addEventListener('click', function () {
+    /* One import path: the rail's button drives the data sheet's file input, so
+     * there is no second place where a dictionary can enter. */
+    var input = el('wbDictFile');
+    if (input) input.click();
   });
   el('wbBrowseBody').addEventListener('click', function (event) {
     var target = event.target;

@@ -81,7 +81,9 @@ its place:
 - **川** (`study.html#river`) is a vertical field of words in tategaki. Drag the
   rod and the first word the hook touches goes into the pool.
 - **池** (`study.html#pool`) is the packing workshop: the words waiting for a
-  brick, and the sheet that packs them. Candidates mined from text keep their own
+  brick, and the two sheets that pack them - `選ぶ` (自動で組む takes the ten the
+  packer would, 手で選ぶ starts empty) then `設定` (name, part of speech, a fixed
+  ten words, 認識 / 産出, first review). Candidates mined from text keep their own
   list behind the filter.
 - **海** (`study.html#sea`) has three parts, switched by the segmented control at
   the top of the left column:
@@ -89,7 +91,9 @@ its place:
   - **ブリック** (`#sea/bricks`) lists the bricks and takes one to the wall.
   - **辞書** (`#sea/dict`) looks a word up across every loaded dictionary - JMdict
     ships with the site, and a Yomitan import adds a monolingual one - with the
-    trail of words you looked up beside it.
+    trail of words you looked up beside it. The rail lists each dictionary by its
+    own title with the eye that hides it, the storage it uses, and the source's
+    own licence or attribution.
 - Definitions come from the shared dictionary module (`src/dict`): import a
   Yomitan JP-JP dictionary and mined or captured words take their definition
   from it. The seeded words keep the built-in monolingual glosses in

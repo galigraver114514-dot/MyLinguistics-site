@@ -24,6 +24,14 @@ export function languageBadge(info) {
   return null;
 }
 
+/* A source's own licence or attribution, which must travel with its data: a
+ * JMdict entry shown without "JMdict © EDRDG" is a licence breach, not a
+ * cosmetic omission. Empty is allowed only for a source that declares none. */
+export function creditLine(info) {
+  if (!info) return '';
+  return info.attribution || info.licence || '';
+}
+
 export function sourceOrder(groups) {
   return (groups || []).map(function (group) { return group && group.id; })
     .filter(function (id) { return !!id; });
