@@ -1,6 +1,6 @@
 # Frozen interface: shared dictionary module
 
-**Version 1.4. Owner: agent-reader.** Changing this file requires a version bump
+**Version 1.5. Owner: agent-reader.** Changing this file requires a version bump
 and an `ANSWER:` entry in `log-wordbook.md` agreeing to it.
 
 Changes in 1.1: Entry gained `headwords` and `readings`, and `raw` is now
@@ -28,6 +28,15 @@ section below is new. Additive: nothing existing changed shape. The tokeniser's
 lexicon is the loaded dictionary indexes themselves, and `sample` answers the
 wordbook's request for a way to reach the shared word pool.
 
+Changes in 1.5: the JMdict **common** pack is built and shipped with the site in
+`dict/`, so `createDictionary()` has a real dictionary on the first visit
+with nothing imported. `packBaseUrl` now defaults to that directory
+**resolved from this module's own URL** rather than the hard-coded `/dict/`: a
+domain-root path 404s on a GitHub Pages project site, and the module always sits
+at `<site>/src/dict/index.js` next to `<site>/dict/`. Passing
+`packBaseUrl` still overrides it. Also fixed a real segmentation bug in
+`scriptRuns` with no API change - see the Tokenisation section.
+
 Both the reader and the vocabulary system need the same four things: import a
 Yomitan dictionary, resolve an inflected surface to a dictionary form, look a
 form up, and render a definition. This is that module, and nothing else.
@@ -54,7 +63,7 @@ and `jsdom`.
 
     options = {
       packs:       ['common'] | ['common', 'full'] | [],   // bundled JMdict
-      packBaseUrl: '/dict/',        // where pack artefacts are served
+      packBaseUrl: <resolved from this module>,  // default <site>/dict/
       storageName: 'ml-dict',       // IndexedDB database name
       onProgress:  (event) => void  // optional
     }
@@ -188,6 +197,12 @@ given and script runs when not, so no caller branches on it. Where nothing
 matches, the gap up to the next match is script-run segmented rather than the
 rest of a hiragana run being swallowed: `犬がいます` becomes `犬 + が +
 います`, not `犬 + がいます`.
+
+The fallback finds the particle boundary from the **end** of the okurigana run,
+never during absorption: `食べるまで` is `食べる + まで`, and
+`食べさせられた` survives `さ`, which the older character-by-character
+version split. Particles are also filtered as stopwords, so `だけ` is never
+offered as a candidate.
 
 ## Performance budget, measured on the target device
 

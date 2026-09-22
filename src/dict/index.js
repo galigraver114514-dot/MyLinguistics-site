@@ -24,6 +24,16 @@ export { importYomitanFile as importYomitanFromFile, restoreYomitan, listYomitan
 
 const DEFAULT_STORAGE = 'ml-dict';
 
+/**
+ * Where the packs are served, resolved from this module's own URL.
+ *
+ * A hard-coded '/dict/' is absolute from the domain root, so it works on a user
+ * site and 404s from a project path such as /MyLinguistics-site/. This module
+ * always lives at <site>/src/dict/index.js and the packs at <site>/dict/, so a
+ * relative URL from here is right on both, for every page that imports it.
+ */
+const DEFAULT_PACK_BASE = new URL('../../dict/', import.meta.url).href;
+
 function describe(error) {
   return String(error && error.message ? error.message : error);
 }
@@ -39,7 +49,7 @@ function describe(error) {
  * }} [options]
  */
 export function createDictionary(options = {}) {
-  const base = options.packBaseUrl || '/dict/';
+  const base = options.packBaseUrl || DEFAULT_PACK_BASE;
   const packs = Array.isArray(options.packs) ? options.packs : ['common'];
   const storageName = options.storageName || DEFAULT_STORAGE;
   const autoRestore = Array.isArray(options.restore) ? options.restore : [];

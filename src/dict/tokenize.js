@@ -13,23 +13,47 @@
  * new data and no model download. When no dictionary is loaded at all, the
  * script-run fallback still produces usable offsets.
  *
- * The device probe fixed the fallback shape: script runs keep a short
- * okurigana tail so 食べる and 読みます stay whole, but stop at a particle so
- * 本を does not become one token. Consecutive kanji cannot be split without a
- * lexicon, which is exactly what longestMatch is for: with one, 毎日本 becomes
- * 毎日 + 本.
+ * The fallback shape: a kanji run takes the whole following hiragana run, then
+ * gives a trailing particle back, so 食べる keeps its okurigana while 食べるまで
+ * is 食べる + まで. Deciding during absorption failed in both directions - まで
+ * was eaten as ま + で, and 食べさせられた split at さ - which is why the boundary
+ * is found from the end of the run. Consecutive kanji still cannot be split
+ * without a lexicon, which is what longestMatch is for: with one, 毎日本
+ * becomes 毎日 + 本.
  *
  * Every token carries UTF-16 offsets into the original string, so a lookup can
  * always be traced back to the text the learner actually tapped.
  */
 
-const MAX_OKURIGANA = 4;
+// A kanji run absorbs its okurigana, and an inflection can be long before the
+// boundary is visible: 食べさせられた is six kana. Ten covers the longest common
+// auxiliary chain, and a trailing particle is given back afterwards.
+const MAX_OKURIGANA = 10;
 const MAX_MATCH = 12;
 
-// Particles and copular fragments that end a kanji stem's hiragana tail.
-const TAIL_STOP = new Set([
-  'を', 'は', 'が', 'に', 'で', 'と', 'も', 'の', 'へ', 'や', 'か', 'ね', 'よ', 'な', 'ぞ', 'ぜ', 'さ'
+// Suffixes that are never part of the word a kanji run started. Longest match
+// wins, so まで is tried before で and から before か.
+//
+// The previous version decided during absorption and stopped at single-char
+// particles, which failed in both directions: 食べるまで became 食べるま + で
+// because まで only reveals itself at its end, and 食べさせられた split at さ
+// because さ is a particle in 本さ and okurigana in させられた. Taking the whole
+// okurigana run and giving a trailing particle back fixes both.
+const PARTICLE_SUFFIX = new Set([
+  'は', 'が', 'を', 'に', 'で', 'と', 'も', 'の', 'へ', 'や', 'か', 'ね', 'よ', 'な', 'ぞ', 'ぜ', 'さ',
+  'まで', 'だけ', 'ほど', 'くらい', 'ぐらい', 'ごろ', 'ばかり', 'こそ', 'って',
+  'けど', 'けれど', 'けれども', 'ので', 'のに', 'から', 'より', 'でも', 'では',
+  'には', 'とは', 'へは', 'にも', 'とも', 'かも', 'とか', 'だの', 'など',
+  'なんか', 'なんて', 'やら', 'きり', 'っきり', 'しか', 'ずつ', 'ため', 'ために',
+  'よう', 'ように', 'として', 'について', 'によって', 'にとって', 'において',
+  'です', 'でした', 'でしょう', 'である', 'であります', 'じゃない', 'ではない',
+  'かもしれない', 'だろう'
 ]);
+
+// だ and だった are the copula after a bare kanji (学生だ) and the past
+// auxiliary after ん (読んだ). Only the first is a boundary, so they are given
+// back only when they start the tail.
+const BARE_COPULA = new Set(['だ', 'だった']);
 
 // Pure-kana function words. High frequency and known to any N1+ reader, so
 // they are noise in a candidate list. Deliberately small and easy to edit.
@@ -43,6 +67,10 @@ export const STOPWORDS = new Set([
   'ぐらい', 'ごろ', 'らしい', 'そう', 'どう', 'とても', '少し', 'ちょっと',
   'いつも', '時々', 'まず', 'すぐ', 'よく', 'もっと', 'すべて', '全部', 'みんな'
 ]);
+
+// Every particle is a function word and none of them is content. Kept in step
+// with the suffixes scriptRuns gives back rather than written out twice.
+PARTICLE_SUFFIX.forEach(function (particle) { STOPWORDS.add(particle); });
 
 /** One code point, its script class. */
 export function classOf(codePoint) {
@@ -91,7 +119,27 @@ export function classify(surface) {
   return 'other';
 }
 
-/** Script-run segmentation. No lexicon needed, and the fallback. */
+/**
+ * How many trailing code points of a hiragana run are a particle or copula.
+ * chars[from..to) is the run, and the result is always at most to - from.
+ */
+function trailingSuffixLength(chars, value, from, to) {
+  for (let len = to - from; len >= 1; len--) {
+    const start = to - len;
+    const surface = value.slice(chars[start].start, chars[to - 1].end);
+    if (PARTICLE_SUFFIX.has(surface)) return len;
+    if (start === from && BARE_COPULA.has(surface)) return len;
+  }
+  return 0;
+}
+
+/**
+ * Script-run segmentation. No lexicon needed, and the fallback.
+ *
+ * A kanji run takes the whole following hiragana run - up to the cap - and then
+ * gives back a trailing particle, so 食べるまで is 食べる + まで rather than
+ * 食べるま + で, while 食べる keeps its okurigana and 食べさせられた survives さ.
+ */
 export function scriptRuns(text) {
   const value = String(text == null ? '' : text);
   const chars = walk(value);
@@ -105,11 +153,20 @@ export function scriptRuns(text) {
     if (cls === 'kanji') {
       let k = j;
       let extra = 0;
-      while (k < chars.length && classOf(chars[k].cp) === 'hiragana' && extra < MAX_OKURIGANA && !TAIL_STOP.has(chars[k].ch)) {
+      while (k < chars.length && classOf(chars[k].cp) === 'hiragana' && extra < MAX_OKURIGANA) {
         k += 1;
         extra += 1;
       }
-      j = k;
+      const stop = k - trailingSuffixLength(chars, value, j, k);
+      const last = stop - 1;
+      tokens.push({
+        surface: value.slice(chars[i].start, chars[last].end),
+        start: chars[i].start,
+        end: chars[last].end,
+        cls: cls
+      });
+      i = stop;
+      continue;
     }
 
     const last = j > i ? j - 1 : i;

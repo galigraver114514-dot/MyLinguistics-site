@@ -9,7 +9,7 @@
  * Writes are awaited but never fatal: app.js paints the highlight in memory
  * first, so a refused or unavailable store costs persistence and nothing else.
  */
-import { openReaderDb } from './db.js?v=7';
+import { openReaderDb } from './db.js?v=8';
 
 export function openAnnotations(options = {}) {
   const db = options.db || openReaderDb(options);

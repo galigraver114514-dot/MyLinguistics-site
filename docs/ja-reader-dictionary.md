@@ -239,5 +239,11 @@ Much smaller than the old design required:
 No separate data repository, no CDN, no shard generation, no manifest. The
 packs belong in the site's own build output.
 
+**Built:** @@dict/jmdict-eng-common.json.gz@@, 1.4 MB, the release JSON gzipped
+unchanged. It is committed and served at @@/dict/@@; @@dict/README.md@@ carries
+the source, the licence and the rebuild command. The @@full@@ and @@names@@
+packs are named but not committed: 11 MB in the public git history is paid again
+on every release for a pack the reader does not load by default.
+
 Attribution and the CC BY-SA licence text ship alongside and are rendered in
 the UI.
