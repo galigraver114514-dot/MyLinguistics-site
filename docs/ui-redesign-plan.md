@@ -115,9 +115,14 @@ implementation, and the reader's actions in the nav bar.
 **Reader.** A document view inside the shell. Full-bleed page; nav bar and tab
 bar float over it as translucent material; its own bar and footer stay hidden
 when embedded.
-- Replace the footer with a **thin progress rail above the tab bar**: page
-  position, tap to jump, hold to scrub. Swipe and the margin taps already turn
-  pages; prev/next buttons are a desktop affordance.
+- Replace the footer with a **thin progress rail**: page position, tap to
+  jump, hold to scrub. Swipe and the margin taps already turn pages; prev/next
+  buttons are a desktop affordance.
+  **Its anchor is now open.** It was decided as "above the tab bar", and the
+  bottom tab bar is deleted in favour of a floating capsule at the top, so
+  "above the tab bar" no longer names a place. agent-visual answers it in
+  `designs/design.pen`; the reader's markup waits for the element contract
+  rather than inventing one (a `REQUEST:` is in `log-reader.md`).
 - `A−` and `A＋` move into the nav bar's actions.
 - Default page theme follows the system; 生成り is a choice in 表示.
 
@@ -138,20 +143,26 @@ Three tabs, nothing else.
 | Visual direction | **Pure iOS system**, with the reading view as a document view |
 | Accent | **Blue acts, sepia reads** - the system tint for anything tappable, sepia only as the 生成り page ink |
 | Reading themes | **Keep three** (生成り / 白 / 夜), rewritten as `--page-*` tokens; the default now follows the system appearance |
-| Page position | **A thin progress rail above the tab bar**; A−/A+ into the nav bar |
+| Page position | **A thin progress rail**, A−/A+ into the nav bar. The rail's anchor moved with the navigation - see section 7 |
 | Reference | none given - the above is the spec |
 
 ## 9. Rollout, each step shippable
 
-1. **Tokens only.** Move the reader's page colours and highlight colours into
-   tokens, add the page and motion tokens, change the default page theme to
-   follow the system. Visible but structural, one or two files.
-2. **Motion.** The page-turn animation, the motion tokens, the reduced-motion
-   rule and a setting. The most visible change, the least structural.
-3. **Reader inside the shell.** Progress rail, actions in the nav bar, full-bleed
-   page. This is where the reader stops being a separate world.
-4. **Wordbook pages.** The markup is agent-wordbook's and the styling is mine, so
-   this needs a `REQUEST:` / `ANSWER:` before any of it.
-5. **Overview, Home, About.** Consolidation last, when the tokens have settled.
+Ownership changed on 2026-09-22: **agent-visual owns the design system, the
+shell, motion and interaction** (see `docs/coordination/README.md`). The steps
+below are the same steps; the names are not.
 
-Steps 1 and 2 are independent of everybody else and can start immediately.
+1. **Tokens.** Move the page colours and highlight colours into tokens, add the
+   page and motion tokens, change the default theme to follow the system.
+   **agent-visual**, and the token half is already committed (`d3ab44e`).
+2. **Motion.** The page-turn animation, motion.css, the reduced-motion rule and
+   a setting. **agent-visual.**
+3. **Reader inside the shell.** Progress rail, actions in the nav bar, full-bleed
+   page. Split: the shell is agent-visual's, the reader's markup and hooks are
+   agent-reader's, and the reader's stylesheet is agent-visual's. Two
+   `REQUEST:` blocks in `log-reader.md` are the only thing in the way -
+   the `data-page-theme` rename and the rail's element contract.
+4. **Wordbook pages.** The markup is agent-wordbook's and the styling is
+   agent-visual's, so this needs a `REQUEST:` / `ANSWER:` before any of
+   it.
+5. **Overview, Home, About.** Consolidation last, when the tokens have settled.

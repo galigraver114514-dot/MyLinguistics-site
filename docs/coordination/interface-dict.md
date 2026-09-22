@@ -1,6 +1,6 @@
 # Frozen interface: shared dictionary module
 
-**Version 1.6. Owner: agent-reader.** Changing this file requires a version bump
+**Version 1.7. Owner: agent-reader.** Changing this file requires a version bump
 and an `ANSWER:` entry in `log-wordbook.md` agreeing to it.
 
 Changes in 1.1: Entry gained `headwords` and `readings`, and `raw` is now
@@ -42,6 +42,13 @@ next one across a one-kana infix, so 振り分け, 食べ物 and 読み方 are o
 instead of two. No API shape changed; the version moves because the tokens a
 consumer sees do.
 
+Changes in 1.7: Dictionary gained `lookupGrouped`, which is `lookup()`
+grouped by source and put in reading order. Purely additive - `lookup()` is
+untouched, still flat and still in load order, so no existing caller changes
+behaviour. It exists because the wordbook's dictionary view shows a monolingual
+dictionary and JMdict as two labelled sections, and the reader's popup wants the
+same order; without it each caller re-derives the grouping and they drift.
+
 Both the reader and the vocabulary system need the same four things: import a
 Yomitan dictionary, resolve an inflected surface to a dictionary form, look a
 form up, and render a definition. This is that module, and nothing else.
@@ -76,6 +83,7 @@ and `jsdom`.
     Dictionary = {
       ready:          Promise<void>          resolves when bundled packs are usable
       lookup(text, opts)     -> Promise<Entry[]>   text may be inflected
+      lookupGrouped(text, opts) -> Promise<LookupGroup[]>  same hits, grouped
       candidates(surface, token) -> string[]       pure, no IO
       kanji(ch)              -> Promise<KanjiInfo | null>
       sources()              -> SourceInfo[]
@@ -107,6 +115,8 @@ and `jsdom`.
                                 // entries. Yomitan sources may populate it.
     }
 
+    LookupGroup = SourceInfo & { entries: Entry[] }
+
     Sense = {
       pos:      string[],       // from the source, untranslated tags
       tags:     string[],
@@ -126,6 +136,17 @@ and `jsdom`.
 
 `lookup` and `importYomitan` must both be safe to call concurrently and must
 never block the main thread for more than ~50 ms at a time; yield between banks.
+
+`lookupGrouped` returns one group per source **that has a hit** - a source with
+nothing to say is absent rather than empty, so a caller renders what is there and
+does not have to tell "no such word" apart from "not imported yet". Order is a
+policy in the module, not in each caller: a dictionary whose definitions are in
+Japanese comes first, because it answers the question rather than glossing it;
+then a dictionary in any other language, which is JMdict's case; then a source
+that reports no language at all, which cannot claim to be primary. Load order
+breaks ties, so the order is stable. Every group carries its own `licence` and
+`attribution`, because JMdict's licence requires attribution wherever its data
+is shown and an imported dictionary carries its own.
 
 ## Structured content
 

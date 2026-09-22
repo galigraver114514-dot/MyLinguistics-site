@@ -11,10 +11,13 @@ destroying each other's work. It is not documentation for the site.
   within a few minutes, so a broken commit is a broken website.
 - The agents:
   - **agent-reader** - the Japanese EPUB reader, the shared dictionary module,
-    and (by the human's decision on 2026-09-22) the **design system, the shell,
-    motion and interaction** across the site.
+    and the frozen interfaces between them.
   - **agent-wordbook** - the study/vocabulary system: the engine, the wordbook
     pages and their feature UI.
+  - **agent-visual** - **the design system, the shell, motion and interaction
+    across the site, and the reader's visual layer.** The human reassigned this
+    to a third agent on 2026-09-22, after it had been briefly given to
+    agent-reader; the arbitration is recorded below and in `log-reader.md`.
 - No agent can message another. The only channels are the files in this
   directory, the git history, and the human, who relays anything urgent.
 
@@ -40,24 +43,25 @@ destroying each other's work. It is not documentation for the site.
 
 | Path | Owner |
 | --- | --- |
-| `reader/**` | agent-reader |
+| `reader/**` except `reader/reader.css` | agent-reader |
+| `reader/reader.css` | agent-visual, **visual layer only**: `--page-*` tokens, the highlight colours, the progress rail, the embedded state. The reader's structure and everything in `reader/js/**` stay agent-reader's, and `brief-visual.md` section 2 applies unchanged. |
 | `src/dict/**` | agent-reader |
 | `tests/dict-*.test.js`, `tests/reader-*.test.js` | agent-reader |
-| `docs/ja-reader-*.md` | agent-reader |
+| `docs/ja-reader-*.md`, `docs/ui-redesign-plan.md`, `docs/coordination/brief-visual.md` | agent-reader |
 | `docs/coordination/README.md`, `interface-*.md`, `log-reader.md` | agent-reader |
-| `spike.html`, `spike-data/**` - deleted once the probes were done | agent-reader |
+| `.github/workflows/deploy-pages.yml` | agent-reader |
+| `assets/css/**` | agent-visual |
+| `assets/js/shell.js`, `assets/js/app.js`, `assets/js/motion.js` | agent-visual |
+| `designs/**` | agent-visual |
+| `docs/coordination/agent-visual-brief.md`, `log-visual.md` | agent-visual |
 | `src/lexicon/**` | agent-wordbook |
 | `tests/**` except the two prefixes above | agent-wordbook |
 | `package.json`, `package-lock.json`, `node_modules` | agent-wordbook |
-| `study.html`, `docs/ja-vocab-book-design.md` | agent-wordbook |
-| `assets/css/tokens.css`, `assets/css/shell.css`, `assets/js/shell.js` | agent-reader |
-| `assets/css/motion.css`, `assets/js/motion.js` (if a site-wide layer is needed) | agent-reader |
-| root `*.html` **markup** | agent-wordbook, with agent-reader owning layout and styling |
-| `study.html` markup and `assets/css/wordbook.css` | agent-wordbook, consuming the tokens |
-| `assets/css/style.css`, `assets/js/i18n.js` | shared: `REQUEST:` / `ANSWER:` before editing |
+| root `*.html` **markup** (including `study.html`) | agent-wordbook; layout and styling come from agent-visual's CSS |
+| `docs/ja-vocab-*.md`, `docs/coordination/log-wordbook.md` | agent-wordbook |
 | the rest of `assets/**` | agent-wordbook |
-| `.github/**`, `.gitignore`, `README.md` | agent-wordbook |
-| `docs/coordination/log-wordbook.md` | agent-wordbook |
+| `.gitignore`, `README.md` (root), `.github/**` except the deploy workflow | agent-wordbook |
+| `assets/js/i18n.js` | shared: `REQUEST:` / `ANSWER:` before editing |
 
 Anything not listed belongs to whoever claimed it most recently in their log.
 

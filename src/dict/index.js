@@ -143,6 +143,39 @@ export function createDictionary(options = {}) {
     return null;
   }
 
+  /** One source as SourceInfo (interface 1.2). Always a fresh object. */
+  function describeSource(source) {
+    if (typeof source.info === 'function') return source.info();
+    // JMdict packs do not report an index size or bank layout.
+    return {
+      id: source.id,
+      kind: source.kind,
+      title: source.title,
+      revision: source.revision,
+      licence: source.licence,
+      attribution: source.attribution,
+      entryCount: source.entryCount,
+      languages: source.languages || null,
+      keyCount: null,
+      bankCount: null,
+      banks: null
+    };
+  }
+
+  /**
+   * Where a source sits in the display order. See lookupGrouped.
+   *
+   * 0 - the definition is written in Japanese. 1 - it is written in some other
+   * language, which is JMdict's case. 2 - the source does not say, so it cannot
+   * claim to be primary.
+   */
+  function languageRank(info) {
+    const languages = Array.isArray(info.languages) ? info.languages : [];
+    if (languages.indexOf('ja') !== -1) return 0;
+    if (languages.length > 0) return 1;
+    return 2;
+  }
+
   return {
     ready: ready,
 
@@ -182,6 +215,72 @@ export function createDictionary(options = {}) {
         }
       }
       return merged;
+    },
+
+    /**
+     * Look a surface up, grouped by source, in the order a learner reads them.
+     *
+     * lookup() returns one flat list in load order and leaves ordering to the
+     * caller. There are two callers now - the reader's popup and the wordbook's
+     * dictionary view - and both answer the same question, so the policy lives
+     * here once rather than being re-derived twice and differently.
+     *
+     * Order: a dictionary whose definitions are in Japanese first, because it
+     * answers "what does this mean" instead of glossing it; then every other
+     * language; then a source that reports no language at all. Load order
+     * breaks ties, so the order is stable across calls.
+     *
+     * A source with no hits is not returned. The caller renders what is there
+     * without having to tell "no such word" apart from "this dictionary has
+     * nothing to say" or "it is not imported yet".
+     *
+     * Shape: SourceInfo with entries. Attribution travels with the group,
+     * because JMdict's licence requires it wherever its data is shown and a
+     * Yomitan source carries its own.
+     *
+     * @returns {Promise<Array<SourceInfo & { entries: Entry[] }>>}
+     */
+    async lookupGrouped(text, lookupOptions) {
+      await ready;
+      if (closed) return [];
+      const input = typeof text === 'string' ? { surface: text } : (text || {});
+      const token = input.token || (lookupOptions && lookupOptions.token);
+      const list = buildCandidates(input.surface, token);
+      if (list.length === 0) return [];
+
+      const groups = sources.map(function (source, order) {
+        const info = describeSource(source);
+        return {
+          info: info,
+          order: order,
+          rank: languageRank(info),
+          entries: [],
+          seen: new Set()
+        };
+      });
+
+      // Candidate-outer, source-inner, exactly as lookup() does it, so the two
+      // cannot disagree about which entries a surface reaches.
+      for (let c = 0; c < list.length; c++) {
+        for (let s = 0; s < sources.length; s++) {
+          const hits = await sources[s].lookup([list[c]]);
+          const group = groups[s];
+          for (let h = 0; h < hits.length; h++) {
+            const entry = hits[h];
+            const key = entry.source + ':' + entry.id;
+            if (group.seen.has(key)) continue;
+            group.seen.add(key);
+            group.entries.push(entry);
+          }
+        }
+      }
+
+      return groups
+        .filter(function (group) { return group.entries.length > 0; })
+        .sort(function (a, b) { return a.rank - b.rank || a.order - b.order; })
+        .map(function (group) {
+          return Object.assign({}, group.info, { entries: group.entries });
+        });
     },
 
     /** Kanji detail, when a source that carries it is loaded. */
@@ -271,23 +370,7 @@ export function createDictionary(options = {}) {
 
     /** Everything currently in memory, as SourceInfo (interface 1.2). */
     sources() {
-      return sources.map(function (source) {
-        if (typeof source.info === 'function') return source.info();
-        // JMdict packs do not report an index size or bank layout.
-        return {
-          id: source.id,
-          kind: source.kind,
-          title: source.title,
-          revision: source.revision,
-          licence: source.licence,
-          attribution: source.attribution,
-          entryCount: source.entryCount,
-          languages: source.languages || null,
-          keyCount: null,
-          bankCount: null,
-          banks: null
-        };
-      });
+      return sources.map(describeSource);
     },
 
     /** Anything that failed to load or restore, in the order it failed. */
