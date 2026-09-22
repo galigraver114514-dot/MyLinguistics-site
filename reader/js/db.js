@@ -8,17 +8,20 @@
  * different version would block, or upgrade behind the other's back. That is
  * the whole reason this file exists rather than each module opening its own.
  *
- * Upgrade path: v1 held only annotations. v2 adds books (metadata) and
- * bookData (the EPUB bytes). They are separate stores so that listing the shelf
- * never pulls a 30 MB blob into memory.
+ * Upgrade path: v1 held only annotations. v2 added books (metadata) and
+ * bookData (the EPUB bytes), separate so that listing the shelf never pulls a
+ * 30 MB blob into memory. v3 adds bookmarks, its own store and not a flag on an
+ * annotation, because a bookmark is a point in a book and listing the bookmarks
+ * must not read a chapter's highlights.
  */
 
 export const READER_DB = 'ml-reader';
-export const READER_DB_VERSION = 2;
+export const READER_DB_VERSION = 3;
 
 const ANNOTATIONS = 'annotations';
 const BOOKS = 'books';
 const BOOK_DATA = 'bookData';
+const BOOKMARKS = 'bookmarks';
 
 function upgrade(db, transaction) {
   if (!db.objectStoreNames.contains(ANNOTATIONS)) {
@@ -36,6 +39,10 @@ function upgrade(db, transaction) {
   }
   if (!db.objectStoreNames.contains(BOOK_DATA)) {
     db.createObjectStore(BOOK_DATA, { keyPath: 'id' });
+  }
+  if (!db.objectStoreNames.contains(BOOKMARKS)) {
+    const store = db.createObjectStore(BOOKMARKS, { keyPath: 'id' });
+    store.createIndex('byBook', 'book', { unique: false });
   }
 }
 
@@ -76,7 +83,7 @@ export function openReaderDb(options = {}) {
   return {
     name: name,
     version: version,
-    stores: { annotations: ANNOTATIONS, books: BOOKS, bookData: BOOK_DATA },
+    stores: { annotations: ANNOTATIONS, books: BOOKS, bookData: BOOK_DATA, bookmarks: BOOKMARKS },
     available: !!factory,
     open: open,
     close: close

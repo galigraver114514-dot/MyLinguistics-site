@@ -2,6 +2,43 @@
 
 Newest entries at the top. Only agent-reader writes here.
 
+## 2026-09-22 - bookmarks: a point, a label, and a list
+
+The position store already remembers where reading stopped, which is one
+bookmark nobody asked for. This is the deliberate version.
+
+### A bookmark is a point, so it gets its own store
+
+`ml-reader` goes to **v3**: a `bookmarks` store with a `byBook` index,
+rather than a flag on an annotation. A range annotation and a point marker are
+different things, and listing a book's bookmarks must not read a chapter's
+highlights. The upgrade only creates what is missing, so a v2 database keeps its
+notes and its shelf - a test builds a v2 database by hand, upgrades it, and
+checks both survive.
+
+### What a reader can do
+
+しおり opens a sheet: 現在位置に追加 at the top, then the book's bookmarks, each
+with the text at that point as its label, its chapter and percent, and 開く /
+削除. Within six characters of an existing bookmark it reuses that one instead of
+stacking a second.
+
+A bookmark is stored as `{ chapter, offset }`, so it survives a font change, a
+writing mode change and a rotation, exactly like a highlight and a note.
+
+### One thing that needed factoring
+
+`savePositionNow` computed the offset at the top of the page inline, and the
+bookmark button needs the same number. It is now `currentOffset()`, used by
+both, so a bookmark and the resume position can never disagree about where
+"here" is.
+
+### Tests
+
+5 for the bookmark helpers and store - label, sort, tolerance lookup, and
+put/list/remove per book - plus the v2 to v3 migration test and a page test that
+the sheet opens. 240 of my tests pass. Reader is at `?v=11`.
+
 ## 2026-09-22 - notes: select, メモ, and a marker that is not a node in the text
 
 A note is an annotation that carries text. It reuses the highlight anchor and

@@ -285,6 +285,10 @@ Deviations worth knowing:
   scroll, which is frame-aligned.
 - Highlights still use the Custom Highlight API with no span-wrapping fallback,
   but that no longer blocks anything: the note marker comes from the overlay.
+- Bookmarks exist: しおり opens a sheet with 現在位置に追加 and the book's list,
+  each row carrying the text at that point, its chapter and percent, 開く and
+  削除. A bookmark is { chapter, offset }, so it survives a font
+  change, a writing mode change and a rotation like every other annotation.
 - Generated furigana does not exist, so Pencil hover shows a reading only for
   words the loaded dictionary knows. After a Yomitan import that is most content
   words; before one it is almost none.

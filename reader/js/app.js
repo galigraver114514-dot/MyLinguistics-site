@@ -13,18 +13,19 @@
  * stepping scrollLeft by exactly one clientWidth moves exactly one page.
  */
 
-import { openEpub } from './epub.js?v=10';
-import { buildChapter } from './text-model.js?v=10';
-import { prepareAndMount } from './render.js?v=10';
-import { SAMPLE_BOOK } from './sample.js?v=10';
-import { createLookup } from './lookup.js?v=10';
-import { createDictionary } from '../../src/dict/index.js?v=10';
-import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=10';
-import { createPainter } from './highlight.js?v=10';
-import { createLibrary } from './library.js?v=10';
-import { openAnnotations } from './annotations.js?v=10';
-import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=10';
-import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=10';
+import { openEpub } from './epub.js?v=11';
+import { buildChapter } from './text-model.js?v=11';
+import { prepareAndMount } from './render.js?v=11';
+import { SAMPLE_BOOK } from './sample.js?v=11';
+import { createLookup } from './lookup.js?v=11';
+import { createDictionary } from '../../src/dict/index.js?v=11';
+import { renderGloss, ensureStyles, hydrateImages } from '../../src/dict/structured.js?v=11';
+import { createPainter } from './highlight.js?v=11';
+import { createLibrary } from './library.js?v=11';
+import { openAnnotations } from './annotations.js?v=11';
+import { rangeFor, dragRange, cycleGranularity, isRange, preview } from './selection.js?v=11';
+import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes.js?v=11';
+import { createBookmarks, bookmarkLabel, findBookmark } from './bookmarks.js?v=11';
 
 /**
  * Bumped together with the query strings above.
@@ -35,7 +36,7 @@ import { isNote, notesOf, findNote, markerPlacement, previewNote } from './notes
  * running version is visible on screen, which is the only way to tell a stale
  * cache apart from a real bug from a bug report.
  */
-const APP_VERSION = 'js r10';
+const APP_VERSION = 'js r11';
 
 const SETTINGS_KEY = 'reader.settings.v2';
 const POSITIONS_KEY = 'reader.positions.v2';
@@ -89,7 +90,8 @@ const els = {
   selectDict: document.getElementById('select-dict'),
   selectClear: document.getElementById('select-clear'),
   selectNote: document.getElementById('select-note'),
-  noteMarkers: document.getElementById('note-markers')
+  noteMarkers: document.getElementById('note-markers'),
+  bookmark: document.getElementById('btn-bookmark')
 };
 
 const state = {
@@ -115,7 +117,9 @@ const state = {
   draftRange: null,
   hoverRange: null,
   annotationStore: null,
-  library: null
+  library: null,
+  bookmarks: [],
+  bookmarkStore: null
 };
 
 // Created once, at module load. Where the Custom Highlight API is missing the
@@ -243,14 +247,19 @@ function positions() {
   return readJson(POSITIONS_KEY, {});
 }
 
+/** The top of the current page as a baseText offset, or -1. */
+function currentOffset() {
+  if (!state.model || state.model.length === 0) return -1;
+  try {
+    return offsetAtPoint(sampleX(), sampleY());
+  } catch (error) {
+    return -1;   // a background save must never surface as an uncaught error
+  }
+}
+
 function savePositionNow() {
   if (!state.book || !state.model) return;
-  let offset = -1;
-  try {
-    offset = offsetAtPoint(sampleX(), sampleY());
-  } catch (error) {
-    return;   // a background save must never surface as an uncaught error
-  }
+  const offset = currentOffset();
   if (offset < 0) return;
   const all = positions();
   all[state.book.key] = { chapter: state.index, offset: offset, at: Date.now() };
@@ -495,6 +504,7 @@ async function showChapter(index, offset) {
 
     state.model = buildChapter(els.content);
     await loadAnnotations();
+    await loadBookmarks();
     refreshLookupText();
     closeDict();
     clearSelection();
@@ -1752,6 +1762,157 @@ async function endPencil() {
   repaintHighlights();
 }
 
+/* ------------------------------------------------------------- bookmarks */
+
+function getBookmarkStore() {
+  if (!state.bookmarkStore) state.bookmarkStore = createBookmarks();
+  return state.bookmarkStore;
+}
+
+async function loadBookmarks() {
+  state.bookmarks = [];
+  if (!state.book) return;
+  try {
+    const store = getBookmarkStore();
+    if (store && store.available) state.bookmarks = await store.list(state.book.key);
+  } catch (error) {
+    state.bookmarks = [];
+  }
+}
+
+/** Add a bookmark at an offset, or return the one already within a few chars. */
+async function addBookmarkAt(offset) {
+  if (!state.book || !state.model || offset < 0) return null;
+  const existing = findBookmark(state.bookmarks, state.index, offset, 6);
+  if (existing) return existing;
+  const record = {
+    id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    book: state.book.key,
+    chapter: state.index,
+    offset: offset,
+    label: bookmarkLabel(state.model.slice(offset, offset + 60)),
+    createdAt: new Date().toISOString()
+  };
+  state.bookmarks.push(record);
+  state.bookmarks = state.bookmarks.slice().sort(function (a, b) {
+    if (a.chapter !== b.chapter) return a.chapter - b.chapter;
+    return a.offset - b.offset;
+  });
+  try {
+    const store = getBookmarkStore();
+    if (store && store.available) await store.put(record);
+  } catch (error) {
+    // It is in memory for this session; only the persisted copy is missing.
+  }
+  return record;
+}
+
+async function removeBookmark(bookmark) {
+  const at = state.bookmarks.indexOf(bookmark);
+  if (at >= 0) state.bookmarks.splice(at, 1);
+  try {
+    const store = getBookmarkStore();
+    if (store && store.available) await store.remove(bookmark.id);
+  } catch (error) {
+    // Already gone from the list.
+  }
+}
+
+function goToBookmark(bookmark) {
+  if (!state.book) return;
+  if (bookmark.chapter !== state.index) {
+    showChapter(bookmark.chapter, bookmark.offset).catch(function (error) { fail(error); });
+    return;
+  }
+  restoreOffset(bookmark.offset);
+  queueSave();
+}
+
+function bookmarkRow(bookmark) {
+  const item = document.createElement('li');
+  const label = document.createElement('strong');
+  label.textContent = bookmark.label || 'しおり';
+  item.appendChild(label);
+
+  const meta = document.createElement('span');
+  meta.className = 'meta';
+  const length = state.model ? Math.max(1, state.model.length) : 1;
+  const percent = Math.max(0, Math.min(100, Math.round((bookmark.offset / length) * 100)));
+  meta.textContent = '第 ' + (bookmark.chapter + 1) + ' 章 · ' + percent + '%';
+  item.appendChild(meta);
+
+  const row = document.createElement('div');
+  row.className = 'dict-candidates';
+
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.textContent = '開く';
+  open.addEventListener('click', function () {
+    closeSheet();
+    goToBookmark(bookmark);
+  });
+  row.appendChild(open);
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = '削除';
+  remove.addEventListener('click', async function () {
+    remove.disabled = true;
+    await removeBookmark(bookmark);
+    openSheet('しおり', buildBookmarksSheet);
+  });
+  row.appendChild(remove);
+  item.appendChild(row);
+  return item;
+}
+
+function buildBookmarksSheet(body) {
+  const offset = currentOffset();
+
+  const intro = document.createElement('p');
+  intro.className = 'dict-hint';
+  intro.textContent = 'しおりはこの端末に保存されます。位置は文字の位置で覚えるので、文字サイズや組み方向を変えてもずれません。';
+  body.appendChild(intro);
+
+  const actions = document.createElement('div');
+  actions.className = 'row';
+  const add = document.createElement('button');
+  add.type = 'button';
+  add.textContent = '現在位置に追加';
+  add.disabled = offset < 0;
+  add.addEventListener('click', async function () {
+    add.disabled = true;
+    await addBookmarkAt(offset);
+    openSheet('しおり', buildBookmarksSheet);
+  });
+  actions.appendChild(add);
+  body.appendChild(actions);
+
+  const list = document.createElement('ul');
+  list.className = 'dict-list';
+  if (state.bookmarks.length === 0) {
+    const item = document.createElement('li');
+    item.textContent = 'まだしおりがありません。';
+    list.appendChild(item);
+  } else {
+    for (let i = 0; i < state.bookmarks.length; i++) list.appendChild(bookmarkRow(state.bookmarks[i]));
+  }
+  body.appendChild(list);
+}
+
+function openBookmarksSheet() {
+  if (!state.book) {
+    openSheet('しおり', function (body) {
+      const note = document.createElement('p');
+      note.className = 'dict-hint';
+      note.textContent = '本を開いていません。';
+      body.appendChild(note);
+    });
+    return;
+  }
+  openSheet('しおり', buildBookmarksSheet);
+}
+
 /* --------------------------------------------------------------- wiring */
 
 function toggleChrome() {
@@ -1894,6 +2055,7 @@ els.sample.addEventListener('click', function () {
   openSample().catch(function (error) { fail(error); });
 });
 els.toc.addEventListener('click', function () { openSheet('目次', buildToc); });
+els.bookmark.addEventListener('click', openBookmarksSheet);
 els.settings.addEventListener('click', function () { openSheet('表示', buildSettings); });
 els.closeSheet.addEventListener('click', closeSheet);
 els.overlay.addEventListener('click', function (event) { if (event.target === els.overlay) closeSheet(); });
@@ -1977,6 +2139,7 @@ const READER_ACTIONS = [
   { id: 'file', label: 'ファイル' },
   { id: 'toc', label: '目次' },
   { id: 'dict', label: '辞書' },
+  { id: 'bookmark', label: 'しおり' },
   { id: 'settings', label: '表示' }
 ];
 
@@ -1984,6 +2147,7 @@ function shellAction(id) {
   if (id === 'file') openLibrarySheet();
   else if (id === 'toc') openSheet('目次', buildToc);
   else if (id === 'dict') openDictionarySheet();
+  else if (id === 'bookmark') openBookmarksSheet();
   else if (id === 'settings') openSheet('表示', buildSettings);
 }
 
@@ -2045,7 +2209,7 @@ if (typeof document !== 'undefined') {
 }
 
 const buildEl = document.getElementById('build');
-if (buildEl) buildEl.textContent = 'html r10 · ' + APP_VERSION;
+if (buildEl) buildEl.textContent = 'html r11 · ' + APP_VERSION;
 
 // If the previous run never reached "done", its last stage is still in storage.
 // Say so, instead of leaving the next run to reproduce the same freeze blind.
