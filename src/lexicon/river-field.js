@@ -235,7 +235,7 @@ export function createField(options) {
       var top = mine.reduce(function (a, b) { return a.y <= b.y ? a : b; });
       if (top.y > 0) {
         /* The top edge is no longer crossed: bring a word up from below the view. */
-        var below = mine.filter(function (item) { return item.y > height; });
+        var below = mine.filter(function (item) { return item.y > height && item.term; });
         if (below.length) {
           var source = deepestOf(below);
           refill(source);
@@ -263,26 +263,45 @@ export function createField(options) {
     feedTops();
   }
 
-  /* Put a different word in a slot that already exists, keeping where it is.
-   * A taken word leaves no hole in its column: another word is already on its
-   * way down that slot, which is what an endless river should do.
+  /* The slot a word was lifted from stays empty.
    *
-   * `fade` (default on) is for a word arriving out of sight above the top edge,
-   * where fading in is what makes a recycle read as the river refreshing rather
-   * than as a word teleporting. The two replacements that happen *in view* - the
-   * slot a word was just lifted from, and the slot a word is put back into - must
-   * pass `fade: false`, or the new word is drawn from alpha 0 and the column
-   * shows a blank exactly where the finger is until the fade finishes. */
-  function replaceAt(item, word, options) {
+   * It used to be given a new word on the same frame so the column never showed a
+   * hole. The human's rule is the opposite: the hole is what taking a word leaves,
+   * and filling it only repeats a word that is already in the water (the pool is a
+   * cycle). The box stays, so the column's spacing is untouched - the hole is
+   * exactly the size of the word that was there. */
+  function empty(item) {
     if (!item) return null;
-    var next = word || nextWord();
-    if (next && next.term) {
-      item.term = String(next.term);
-      item.reading = next.reading || '';
-      item.height = heightOf(item.term);
-      if (!options || options.fade !== false) item.born = now();
-    }
+    item.term = '';
+    item.reading = '';
+    item.caught = false;
     return item;
+  }
+
+  /* The word goes back into the river: into its own slot while that is still there,
+   * otherwise in at the top of its column - a slot that has scrolled past the bottom
+   * is dropped, and the word is still water. */
+  function restore(item, word) {
+    if (!word || !word.term) return null;
+    if (item && items.indexOf(item) >= 0) {
+      item.term = String(word.term);
+      item.reading = word.reading || '';
+      item.height = heightOf(item.term);
+      item.caught = false;
+      return item;
+    }
+    var column = columns[0];
+    for (var c = 0; c < columns.length; c += 1) {
+      if (item && columns[c].index === item.column) column = columns[c];
+    }
+    var fresh = prepend(column);
+    if (!fresh) return null;
+    fresh.term = String(word.term);
+    fresh.reading = word.reading || '';
+    fresh.height = heightOf(fresh.term);
+    var top = columnTop(column.index, fresh);
+    fresh.y = (top === Infinity ? 0 : top) - fresh.height - gap;
+    return fresh;
   }
 
   /* Which word is under a point, without marking anything: the view asks, the
@@ -292,6 +311,7 @@ export function createField(options) {
     var found = null;
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i];
+      if (!item.term) continue;          // an empty slot holds nothing to take
       if (x < item.x || x > item.x + item.width) continue;
       if (y < item.y || y > item.y + item.height) continue;
       if (!found || item.y > found.y) found = item;
@@ -337,7 +357,8 @@ export function createField(options) {
     columns: function () { return columns.slice(); },
     catchAt: catchAt,
     itemAt: itemAt,
-    replaceAt: replaceAt,
+    empty: empty,
+    restore: restore,
     caught: function () { return items.filter(function (item) { return item.caught; }); },
     releaseCaught: function () { clearCaught(); return items.length; },
     conflicts: conflicts,

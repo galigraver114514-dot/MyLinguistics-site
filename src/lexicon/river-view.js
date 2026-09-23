@@ -194,6 +194,7 @@ export function createRiverView(canvas, options) {
     var bornMs = field.bornMs || 260;
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i];
+      if (!item.term) continue;      // the slot a taken word left: nothing to draw
       /* A word that has been placed at the top fades in: the river is endless,
        * so a word appearing from nothing is the one thing that gives away that
        * it is a loop. */
@@ -301,9 +302,13 @@ export function createRiverView(canvas, options) {
     if (dropEl && dropEl.classList) dropEl.classList.toggle('is-over', on);
   }
 
-  /* Picking a word up takes it out of its column and puts another one in its
-   * place on the same frame: the slot never stays empty, and the column keeps
-   * behaving like a stream instead of a hole. */
+  /* Picking a word up leaves its slot empty.
+   *
+   * It used to be given another word on the same frame, so a column never showed a
+   * hole. The human's rule is the opposite, and it is the better one: the hole is
+   * what taking a word leaves, and the word that filled it could only be one the
+   * water already shows (the pool is a cycle, so it reads as a repeat). The box
+   * stays, so the spacing is untouched - the hole is the size of the word taken. */
   function lift() {
     pressTimer = null;
     var item = press && press.item;
@@ -318,9 +323,7 @@ export function createRiverView(canvas, options) {
       lift: 0,
       slot: item
     };
-    /* In view: the replacement must be drawn immediately, not faded in from
-     * alpha 0, or the slot reads as a hole under the finger for 260ms. */
-    field.replaceAt(item, null, { fade: false });
+    field.empty(item);
     press = null;
     kick();
     return true;
@@ -330,10 +333,11 @@ export function createRiverView(canvas, options) {
     if (!held) return null;
     var taken = { term: held.term, reading: held.reading };
     if (!landedInBucket && held.slot) {
-      /* Let go anywhere but the bucket and the word goes back where it came
-       * from - it is the same river, and nothing was decided. In view, so it
-       * cannot fade: the slot would look empty while it does. */
-      field.replaceAt(held.slot, { term: taken.term, reading: taken.reading }, { fade: false });
+      /* Let go anywhere but the bucket and the word goes back where it came from -
+       * it is the same river, and nothing was decided. Its own slot when that is
+       * still on screen, the top of its column when the flow has carried the hole
+       * away. */
+      field.restore(held.slot, { term: taken.term, reading: taken.reading });
     }
     held = null;
     markDropZone(false);

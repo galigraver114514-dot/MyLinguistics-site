@@ -57,8 +57,11 @@ two sheets, and taken to 壁 from 海 · ブリック総覧 or from the pool's b
 - 川: **press and hold a word (~300ms), then drag it into the bucket.** There is
   no rod; the concept was deleted by the human. A tap takes nothing. Letting go
   over the bucket puts the word there; letting go anywhere else puts it back in
-  the river. While a word is held, another word takes its slot on the same frame
-  so the column never shows a hole.
+  the river. **The slot a taken word leaves stays empty** (the human's rule,
+  2026-09-23): filling it can only put back a word the water already shows, since
+  the pool is a cycle. Letting go elsewhere puts the word back into its own slot,
+  or - if the flow has already carried that slot past the bottom edge and dropped
+  it - in at the top of its column. An empty slot cannot be picked up.
 - 桶: a chip is a button — pressing it returns that word to the river, and 取消
   returns all of them.
 - Every other control is a normal button.

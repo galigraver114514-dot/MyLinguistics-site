@@ -339,3 +339,27 @@ one-step overshoot; the old code fails it by hundreds of px.
 
 **Still not run**: `run.mjs` / `interact.mjs` need the playwright kit in `/tmp/pw-kit`,
 which was reclaimed between sessions. `sh designs/verify/setup.sh` first.
+
+## 2026-09-23 - the slot a taken word leaves stays empty
+
+The human: 「抓取之后不需要新词补充原来的位置，因为会重复」. That is the other half of the
+rule they gave earlier (「不是被抓取之后留下的空缺…空着就好」): the hole is what taking a
+word leaves, and filling it only shows a word the water already has - the pool is a
+cycle, so it reads as a repeat.
+
+- `river-field.js`: `replaceAt()` (which put a fresh word into a lifted slot) is gone.
+  `empty(item)` clears the slot's word and keeps its box, so the column's spacing is
+  untouched and the hole is exactly the size of the word that was there;
+  `restore(item, word)` puts a word back into its own slot, or above its column when the
+  flow has carried that slot past the bottom and dropped it. `itemAt()` refuses an empty
+  slot (there is nothing there to take) and the top feed will not draw on one.
+- `river-view.js`: `lift()` empties the slot instead of refilling it, `dropHeld()`
+  restores into it, and the canvas skips empty slots (the fallback spans simply carry no
+  text).
+
+Gates:
+
+    node --test tests/river-field.test.js tests/river-release.test.js   14/14
+    npm test                                                           397/397
+    node designs/check-overlap.cjs                                     11 板 × 5 规则全 0
+    run.mjs / interact.mjs                                             not run (no playwright kit)
