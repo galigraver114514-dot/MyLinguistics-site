@@ -119,20 +119,6 @@ export function createField(options) {
     return min;
   }
 
-  /* A word that leaves the bottom comes back above its own column's topmost
-   * word, so the spacing inside a column can never close up. */
-  function recycle(item) {
-    var word = nextWord();
-    if (word && word.term) {
-      item.term = String(word.term);
-      item.reading = word.reading || '';
-      item.height = heightOf(item.term);
-    }
-    var min = columnTop(item.column, item);
-    item.y = min === Infinity ? -item.height - gap : min - item.height - gap;
-    item.caught = false;
-  }
-
   /* Returns whether anything actually moved. A resize that changes nothing
    * keeps the words: the view is reused whenever 川 is reopened. */
   function resize(w, h) {
@@ -146,17 +132,23 @@ export function createField(options) {
     return true;
   }
 
+  /* Deep enough to reach past the bottom edge by the tallest word in the column.
+   * That reserve below the view is what feeds the top while the river flows
+   * (feedTops()); a column that stops at the bottom edge has nothing to feed it
+   * with and shows a blank strip above its words. */
   function fill(count) {
     if (!columns.length) buildColumns();
     items = [];
-    var wanted = Math.max(1, Math.ceil((count || opts.count || 60) / Math.max(1, columns.length)));
+    var perColumn = Math.max(1, Math.ceil((count || opts.count || 60) / Math.max(1, columns.length)));
     for (var c = 0; c < columns.length; c += 1) {
       var y = -gap * (c % 2);
-      for (var k = 0; k < wanted; k += 1) {
+      var tallest = lineHeight;
+      for (var k = 0; k < perColumn * 3; k += 1) {
         var item = place(columns[c], y);
         if (!item) break;
+        if (item.height > tallest) tallest = item.height;
         y += item.height + gap;
-        if (y > height) break;
+        if (y > height + tallest + gap) break;
       }
     }
     coverTop();
@@ -187,15 +179,88 @@ export function createField(options) {
    * and every wrap can widen it - which is what an occasional gap drifting down
    * a column is. Both passes are O(n) and the second one only touches the words
    * that actually left the bottom. */
+  /* Every column keeps a word across its top edge while the river flows, and the
+   * words keep changing while it does.
+   *
+   * The feed runs on the top's schedule, not the bottom's: recycling only when a
+   * word left the bottom lifted the top by *that* word's height while the column had
+   * drifted by the word above it - two different numbers - so the top wandered below
+   * the edge (the blank strip 川 showed while it flowed).
+   *
+   * The word that fills the top is a *fresh* one from the pool, taken from a slot
+   * below the view where nothing visible depends on it. Fresh matters: feeding each
+   * column its own word back looks alive while showing the same handful forever.
+   *
+   * What bounds the field is the reservoir, not the word's identity. A column may
+   * keep a few words below the view (RESERVE); when that runs out it is given one,
+   * and the surplus is dropped - so the count settles instead of growing for as long
+   * as 川 is left open, and nothing on screen moves for either. */
+  var RESERVE = 3;
+
+  /* Give a slot a fresh word from the pool. The height comes with the word, so the
+   * caller places the slot after this. */
+  function refill(item) {
+    var word = nextWord();
+    if (word && word.term) {
+      item.term = String(word.term);
+      item.reading = word.reading || '';
+      item.height = heightOf(item.term);
+    }
+    item.caught = false;
+    return item;
+  }
+
+  function columnItems(index) {
+    var out = [];
+    for (var i = 0; i < items.length; i += 1) {
+      if (items[i].column === index) out.push(items[i]);
+    }
+    return out;
+  }
+
+  function deepestOf(list) {
+    var deep = null;
+    for (var i = 0; i < list.length; i += 1) {
+      if (!deep || list[i].y > deep.y) deep = list[i];
+    }
+    return deep;
+  }
+
+  function feedTops() {
+    for (var c = 0; c < columns.length; c += 1) {
+      var index = columns[c].index;
+      var mine = columnItems(index);
+      if (!mine.length) continue;
+
+      var top = mine.reduce(function (a, b) { return a.y <= b.y ? a : b; });
+      if (top.y > 0) {
+        /* The top edge is no longer crossed: bring a word up from below the view. */
+        var below = mine.filter(function (item) { return item.y > height; });
+        if (below.length) {
+          var source = deepestOf(below);
+          refill(source);
+          source.y = top.y - source.height - gap;
+        } else {
+          prepend(columns[c]);   // the column has run short: it needs one more
+        }
+        mine = columnItems(index);
+      }
+
+      /* Keep the reserve small. Deepest first: those are the ones the feed will not
+       * need for the longest time. Dropping is free - they are below the view. */
+      var reserve = mine.filter(function (item) { return item.y > height; });
+      while (reserve.length > RESERVE) {
+        var dead = deepestOf(reserve);
+        items.splice(items.indexOf(dead), 1);
+        reserve.splice(reserve.indexOf(dead), 1);
+      }
+    }
+  }
+
   function step(dt) {
     if (!dt || dt <= 0) return;
-    var wrapped = [];
-    for (var i = 0; i < items.length; i += 1) {
-      var item = items[i];
-      item.y += item.speed * dt;
-      if (item.y > height) wrapped.push(item);
-    }
-    for (var w = 0; w < wrapped.length; w += 1) recycle(wrapped[w]);
+    for (var i = 0; i < items.length; i += 1) items[i].y += items[i].speed * dt;
+    feedTops();
   }
 
   /* Put a different word in a slot that already exists, keeping where it is.

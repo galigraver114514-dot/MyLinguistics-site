@@ -246,3 +246,96 @@ is what caught the `step()` ordering, and it fails on the old code.
     node designs/verify/run.mjs           16/16 routes clean
     node designs/verify/interact.mjs      13/13 checks
     node designs/check-overlap.cjs        11 boards, five rules each, all 0
+
+## 2026-09-23 - 川's blank band at the top, while it flows
+
+The human: 「不是被抓取之后留下的空缺…是流动时上方的空缺」. The strip above a
+column's words while the river runs, not the slot a caught word leaves (that one
+stays empty on purpose).
+
+### What it actually was
+
+A column moves down as one body. The old rule recycled the word that left the
+bottom, lifting the top by *that* word's height, while the column had meanwhile
+drifted down by the height of the word above it - two different numbers - so the
+top position random-walked and could sit below the edge for seconds. `coverTop()`
+could not help: it only runs when the field is filled, and it fires on the
+bottom's schedule rather than the top's.
+
+Measured in the app before the change (browser, per column, 10s): the band above
+the words reached **hundreds of px** (`span` also grew: 944 -> 2664 over 400s in
+the stand-alone field harness, because a re-issued word of a different height
+changed the column's depth every time).
+
+### The change (`src/lexicon/river-field.js`)
+
+- A word is no longer recycled the moment it passes the bottom edge. It keeps
+  going, invisibly, and becomes the reserve.
+- `feedTops()` runs every step: when a column's top edge is no longer crossed, the
+  deepest word *below the view* is moved to the top. It keeps its own term and
+  height, so the column's depth is exactly what it was and the count never changes;
+  because it comes from below the view, nothing on screen moves.
+- `fill()` goes deep enough to leave that reserve (past the bottom edge by the
+  tallest word in the column). `recycle()` is gone - nothing called it any more.
+
+### Verified
+
+    node --test tests/river-field.test.js            11/11
+    long run, 30000 steps (500s of flow), 5 columns:
+      worst blank band above the words: 12px  (the design gap)
+      worst blank band below the words: 11px
+      items: 65 -> 65   (no growth; the half-finished attempt grew 12 words / 8 min)
+      every neighbouring gap: exactly 12
+    npm test                                         395/395
+    node designs/check-overlap.cjs                   11 boards, five rules each, all 0
+
+New invariant test: *no column shows a blank band above its words while it flows*
+- measured the way the human sees it (the first y covered from the top edge),
+asserted after fill and after every one of 2000 steps. The old code fails it.
+
+**Not run this round**: `run.mjs` and `interact.mjs` need the playwright kit in
+`/tmp/pw-kit`, and `/tmp` was reclaimed between turns. Re-run both after
+`sh designs/verify/setup.sh` before the next push.
+
+## 2026-09-23 - 川's content was repeating, after the top-band fix
+
+The human: 「河里内容重复太多」. That was this seat's own doing one commit earlier:
+the feed kept each slot's *own* word so that a column's depth stayed exactly what it
+was, which also meant the same handful of words circulated forever. The old wrap
+pulled a fresh word every time.
+
+### The shape that satisfies all of it
+
+Treat it as a stream instead of a carousel:
+
+- the top is fed on the top's schedule (`feedTops()`), from a slot below the view,
+  where nothing visible depends on it - that is what keeps the blank band away;
+- the fed slot is given a **fresh** word from the pool, so the content keeps moving;
+- what bounds the field is the **reserve**, not the word's identity: a column may keep
+  at most `RESERVE = 3` words below the view, it is given one (a fresh word) when that
+  runs out, and the surplus is dropped deepest-first. Dropping an invisible word is
+  free, and it is what stops a long session from turning into a very long array.
+
+The pool sample behind all this went from 60 to **180** (`entry.js`, `RIVER.sample`):
+the field holds ~70 slots, so a pool of ~60 could not fill it without showing the same
+word twice at once.
+
+### Verified (500s of simulated flow, 5 columns, fresh words all the way)
+
+    blank band above the words: worst 12px      below: worst 11px
+    items held between 45 and 52               (bounded; the identity-preserving
+                                                version held 65 forever, the
+                                                wrap version grew 12 words / 8 min)
+    words introduced: 686 calls, 686 distinct terms seen
+    visible gaps not exactly 12: 0 of 26 pairs
+
+    node --test tests/river-field.test.js   13/13  (two new invariants: no band above the
+                                             words, and the field keeps meeting new words)
+    npm test                                396/396
+    node designs/check-overlap.cjs          11 boards, five rules each, all 0
+
+The band assertion allows `gap + 1` px: a frame's travel (~0.7px at 60fps) is the worst
+one-step overshoot; the old code fails it by hundreds of px.
+
+**Still not run**: `run.mjs` / `interact.mjs` need the playwright kit in `/tmp/pw-kit`,
+which was reclaimed between sessions. `sh designs/verify/setup.sh` first.

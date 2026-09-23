@@ -858,7 +858,7 @@ async function resetAll() {
 
 var RIVER = {
   view: null, pool: [], cursor: 0, loading: false, token: null, paused: false,
-  pending: null, sample: 60, count: 70,
+  pending: null, sample: 180, count: 70,
   /* The bucket is deliberately not the pool: emptying it is a decision. */
   bucket: [],
   speed: 1
